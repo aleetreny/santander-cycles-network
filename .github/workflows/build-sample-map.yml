@@ -1,0 +1,75 @@
+name: Build sample TfL network map
+
+on:
+  workflow_dispatch:
+    inputs:
+      year:
+        description: 'Journey year to analyse (e.g. 2025)'
+        required: true
+        default: '2025'
+        type: string
+      files:
+        description: 'Number of recent journey files from that year (e.g. 4)'
+        required: true
+        default: '4'
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build-map:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    env:
+      STUDY_YEAR: ${{ inputs.year }}
+      SAMPLE_FILES: ${{ inputs.files }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Discover TfL historical archive
+        run: python -m cycles inventory
+      - name: Restrict sample to last files from requested year
+        run: |
+          python - <<'PY'
+          import json, os, re
+          from pathlib import Path
+          year = os.environ['STUDY_YEAR']
+          if not re.fullmatch(r'20[0-9]{2}', year):
+              raise ValueError('Year must be 20xx')
+          limit = int(os.environ['SAMPLE_FILES'])
+          if not 1 <= limit <= 10:
+              raise ValueError('Number of sample files must be between 1 and 10')
+          path = Path('data/manifest.json')
+          manifest = json.loads(path.read_text())
+          matches = [f for f in manifest['files'] if year in f['key']]
+          if not matches:
+              raise RuntimeError(f'No TfL journey data files found with year {year} in filename')
+          manifest['files'] = matches[-limit:]
+          path.write_text(json.dumps(manifest, indent=2))
+          print(f'Using {len(manifest["files"])} public TfL extracts: '
+                + ', '.join(x['key'] for x in manifest['files']))
+          PY
+      - name: Download and standardise sample
+        run: |
+          python -m cycles fetch --workers 2
+          python -m cycles stations
+          python -m cycles prepare
+      - name: Generate OD network and interactive HTML
+        run: |
+          python -m cycles network --year "$STUDY_YEAR"
+          python -m cycles map --top 200 --min-journeys 1
+      - name: Upload results for download
+        uses: actions/upload-artifact@v4
+        with:
+          name: santander-cycles-network-sample
+          path: outputs/
+          if-no-files-found: error
+          retention-days: 14

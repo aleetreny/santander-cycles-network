@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+.pytest_cache/
+.DS_Store
+*.py[cod]
+# Never commit TfL raw journey archives or generated datasets.
+data/raw/
+data/processed/
+data/stations/
+data/manifest.json
+outputs/
+*.duckdb
+*.parquet
+*.zip

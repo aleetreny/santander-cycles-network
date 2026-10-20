@@ -2,12 +2,12 @@
 
 **UCL Complex Networks — reproducible Transport for London open-data project.**
 
-Model docking stations as nodes and completed cycle-hire journeys as **directed, weighted origin–destination (OD) edges**. Produce a standalone interactive HTML map, with inbound/outbound flows and a station matching quality report. **Lines connect origins and destinations; they are not inferred GPS cycling routes.**
+Model docking stations as nodes and completed cycle-hire journeys as **directed, weighted origin–destination (OD) edges**. Produce an interactive HTML map, with inbound/outbound flows and a station matching quality report. **Lines connect origins and destinations; they are not inferred GPS cycling routes.**
 
 ## Data sources
 
 - [TfL historical cycle hire journey CSVs](https://cycling.data.tfl.gov.uk/) — weekly/fortnightly extracts from September 2015. Direct public S3 listing: `https://s3-eu-west-1.amazonaws.com/cycling.data.tfl.gov.uk/?list-type=2&prefix=usage-stats/` (no authentication).
-- [TfL BikePoint Unified API](https://api.tfl.gov.uk/BikePoint) — current station coordinates, docking capacity, current availability. Not a historic inventory.
+- [TfL BikePoint Unified API](https://api.tfl.gov.uk/BikePoint) — current station coordinates and metadata. Live availability may require station-specific API calls; not a historic inventory.
 
 TfL attribution: **Powered by TfL Open Data. Contains OS data © Crown copyright and database rights 2016; Geomni UK Map data © and database rights 2019.** See [TfL transport-data terms](https://tfl.gov.uk/corporate/terms-and-conditions/transport-data-service). Data copyright/licence remains with original owners. Code herein is MIT-licensed.
 
@@ -25,6 +25,10 @@ python -m cycles network         # build OD graph across every prepared file
 python -m cycles map --top 150   # create outputs/network_map.html
 open outputs/network_map.html
 ```
+
+### Run a sample map entirely in GitHub (no local installation)
+
+Go to [Actions → Build sample TfL network map](https://github.com/aleetreny/santander-cycles-network/actions/workflows/build-sample-map.yml), select **Run workflow**, and accept the defaults (2025; 4 historical extracts). When the run completes, download the **santander-cycles-network-sample** artifact (ZIP). Inside you will find `network_map.html`, OD edges, node metrics and station-match coverage. Open the HTML in a browser with an internet connection for map tiles. This sample is **not** the full historical archive and GitHub Actions artifacts expire after 14 days.
 
 ### Download the entire available historical archive
 
@@ -47,7 +51,7 @@ Useful options: `network --year 2026 --month 9 --day-type weekday`; `network --s
 cycles/acquire.py      S3 public XML inventory, concurrent downloads, BikePoint API snapshots
 cycles/prepare.py      CSV schema adaptation (2015–2026), timestamp cleanup, Parquet
 cycles/network.py      de-duplicated directed OD aggregation, station geocoding, QA
-cycles/viz.py          offline-readable HTML map using Folium
+cycles/viz.py          interactive HTML map using Folium (map tiles require internet)
 cycles/__main__.py     CLI
 requirements.txt       locked major ranges
 tests/                 schema and API regression tests
