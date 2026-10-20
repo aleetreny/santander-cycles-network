@@ -30,3 +30,14 @@ Published app commit `783a828` at https://aleetreny.github.io/santander-cycles-n
 Repeated the core checks by hand on the public page: + from 12→13→14→15, − back to 12, wheel 12→14→12, and drag from centre 51.515046,-0.129948 to 51.544093,-0.230198. Search/Enter opened Waterloo Station 3 with actual TfL availability and the correct September hourly profile. Both ranking modes displayed the expected first stations; Strata opened with 33% of readings without free docks.
 
 At 390×844, searched Margery Street, opened the sheet, tested +/− and drag, and scrolled the full station statistics. Restored the normal viewport and checked the final desktop view. No browser JavaScript errors were reported. Explicitly reloaded the user's other existing tab, which had retained the old atlas, and verified the new Spanish map. Saved the public-page screenshot locally to `artifacts/simple-production.png`.
+
+
+## Typical connections restored — 20 October 2026
+
+The simple map now retains five typical routes for the selected station. The new independent graph check reconstructs every station's top five incoming/outgoing routes from the complete pinned May edge list and compares the compact export, excluding self-return trips. 21 Python tests and the JavaScript syntax check pass. The connection summary is 160,939 bytes, loaded only after a station is selected.
+
+Manual local browser checks: Pancras Road shows five outgoing lines, five numbered pins and the exact top counts (42 trips to Bonny Street). Changing to incoming shows 43 trips from Bonny Street. Selecting a route preserves Pancras Road and the unchanged camera (zoom 12, centre 51.515000,-0.130000). Tested +/− and the mouse wheel with connections visible, map dragging and the explicit route framing button. Incoming and outgoing directions have static arrowheads. Row and pin selections highlight the matching route. Returning to all stations clears all route paths. Searching Margery then shows its own routes (30 trips to Guilford Street), with no leftover Pancras routes.
+
+Narrow viewport test (390×844 browser override, with the user's existing browser zoom): all five numbered endpoints fit after the framing action; pressing the framing button or selecting a route row returns to the map. Incoming rows preserve the selected station. Tooltip width is bounded to 250px and wraps into readable lines rather than a narrow column. Restored the viewport afterward. No JavaScript errors reported.
+
+Production verification pending the connections deployment.

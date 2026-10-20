@@ -7,3 +7,5 @@ Use normal Leaflet camera behaviour. No selection-driven zoom, zoom callbacks th
 Every number has a unit: bikes, free docks, total spaces, readings or a clearly labelled percentage of observed consultations. A small 24-hour bar chart shows mean available bikes with a plain explanation and an optional table. Fullest/emptiest average hours and the largest mean increase are shown with actual counts.
 
 Focus states, keyboard search, reduced motion, loading/error states and honest fallback timestamps are required. Keep the screen simple; methodological detail stays in a small disclosure.
+
+Typical station connections appear only for the selected station: five blue lines, thickness proportional to recorded trips, static arrowheads and numbered endpoint pins matching a short list. Clicking a line, pin or row highlights that connection while preserving the selected station and camera. Outgoing/incoming switch does not reframe the map. An explicit framing button may fit the five links. May journey counts remain clearly dated separately from September occupancy and current BikePoint availability.

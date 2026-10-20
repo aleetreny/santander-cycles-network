@@ -25,7 +25,7 @@ jobs:
           mkdir -p _site/data
           cp site/index.html site/map.js site/simple.css site/favicon.svg site/fonts.css _site/
           cp -R site/fonts site/vendor _site/
-          cp site/data/live.json site/data/occupancy.json site/data/occupancy-provenance.json _site/data/
+          cp site/data/live.json site/data/occupancy.json site/data/occupancy-provenance.json site/data/connections.json _site/data/
       - uses: actions/upload-pages-artifact@v4
         with:
           path: _site

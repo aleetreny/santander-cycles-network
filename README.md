@@ -14,7 +14,7 @@ The published interface is deliberately simple: one map, a station search and a 
 - **Typical availability:** September 2026, 30 London dates, 2,272,425 usable archived BikePoint readings. Each station shows its empty/full reading fractions, hourly mean bikes/free docks, fullest/emptiest average hour and largest increase between adjacent hourly means.
 - **Two useful rankings:** stations most often observed without bikes, and stations most often observed without free docks. These are observed-reading percentages, not exact time percentages.
 
-There are no OD lines, animations, community controls or study overlays in the published map. The original network research pipeline and its frozen May 2026 exports remain in the repository for reproducibility. They are excluded from the Pages artifact.
+Selecting a station shows its **five typical outgoing or incoming connections** as straight lines, with arrowheads, numbered endpoint pins and explicit recorded-trip counts. Thicker lines mean more trips. These use the pinned **May 2026** journey study; they are not current traffic or street routes. Click a line or row to highlight it without switching station or changing the camera; the framing button is an explicit camera action. No animations, community controls or study overlays. The original network research pipeline and its frozen May 2026 exports remain in the repository for reproducibility. They are excluded from the Pages artifact.
 
 ### Run and verify
 
@@ -32,6 +32,8 @@ Open `http://127.0.0.1:4173/`. The user-facing interactions are verified manuall
 ```bash
 pip install -r requirements-study.txt
 python -m cycles.occupancy --month 2026-09
+# Compact typical routes from the existing pinned journey exports:
+python -m cycles.connections
 # Reuse the same downloaded files and pinned source revision:
 python -m cycles.occupancy --month 2026-09 --offline
 ```
@@ -44,7 +46,7 @@ Inputs remain ignored under `data/occupancy/`. Outputs include source URLs, the 
 
 ### Publish
 
-Pushing `site/` changes to `main` triggers `.github/workflows/pages.yml`. Pages stages only the current page, its assets and the three availability JSON files; it does not upload legacy journey exports. No backend or API keys are needed. Map tiles need an internet connection. Leaflet and fonts are self-hosted with their licences.
+Pushing `site/` changes to `main` triggers `.github/workflows/pages.yml`. Pages stages only the current page, its assets and the availability/compact connection JSON files; it does not upload legacy journey exports. No backend or API keys are needed. Map tiles need an internet connection. Leaflet and fonts are self-hosted with their licences.
 
 ## Data sources
 

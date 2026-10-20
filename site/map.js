@@ -7,6 +7,8 @@ const stamp = value => new Intl.DateTimeFormat('es-ES', {timeZone:'Europe/London
 const small = value => Number(value).toLocaleString('es-ES',{maximumFractionDigits:1});
 const shortName = station => station.name.split(',')[0].trim();
 let map, renderer, selected = null, previous = null, live = null, history = null, mode = 'current', limit = 40, isLive = false, historyFailed = false;
+let connections=null, connectionsRequest=null, connectionsFailed=false, routeDirection='out', focusedRoute=null, routeLayer;
+let routeObjects=[];
 const markers = new Map();
 let stations = [];
 const requested = new URLSearchParams(location.search).get('station');
@@ -68,6 +70,8 @@ function initMap() {
   L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'})
     .on('tileerror',()=>{if(++tileErrors===4){$('map-message').textContent='No se ha podido cargar el mapa de calles. Las estaciones siguen disponibles.';$('map-message').hidden=false;}}).addTo(map);
   renderer=L.canvas({padding:.3});
+  map.createPane('connections').style.zIndex='410';
+  routeLayer=L.layerGroup().addTo(map);
   const report=()=>{$('map').dataset.zoom=String(map.getZoom());$('map').dataset.center=`${map.getCenter().lat.toFixed(6)},${map.getCenter().lng.toFixed(6)}`;};
   map.on('moveend',report);report();
   let width=0,height=0,frame;
@@ -83,7 +87,7 @@ function renderList() {
   let ordered=stations.filter(s=>mode==='current'||stats(s));
   if (mode==='current') ordered.sort((a,b)=>a.name.localeCompare(b.name));
   else ordered.sort((a,b)=>stats(b)[mode]-stats(a)[mode]||a.name.localeCompare(b.name));
-  $('list-caption').textContent=mode==='current'?'Pulsa una estación en el mapa o búscala por nombre.':`Septiembre de 2026. Ordenadas por porcentaje de lecturas ${mode==='empty'?'sin bicis':'sin huecos'}.`;
+  $('list-caption').textContent=mode==='current'?'Pulsa una estación para ver sus trayectos y disponibilidad.':`Septiembre de 2026. Ordenadas por porcentaje de lecturas ${mode==='empty'?'sin bicis':'sin huecos'}.`;
   $('station-list').innerHTML=ordered.slice(0,limit).map(s=>`<li><button class="station" data-station="${esc(s.id)}"><i class="station-dot" style="--status:${colour(s)}"></i><span class="station-name">${esc(shortName(s))}<small>${esc(s.name.split(',').slice(1).join(',').trim())}</small></span><span class="station-value">${mode==='current'?(valid(s)?`${s.bikes} bicis<small>${s.free} huecos libres</small>`:'Sin datos'): `${percent(stats(s)[mode])}<small>de lecturas ${mode==='empty'?'sin bicis':'sin huecos'}</small>`}</span></button></li>`).join('');
   $('more').hidden=ordered.length<=limit;
 }
@@ -102,19 +106,90 @@ function renderHistory(s) {
   const maximum=Math.max(1,...usable.map(x=>x.r[0]));
   return `<section class="history"><h3>Cómo suele estar</h3><p class="period">Septiembre 2026 · ${p.days} días · ${number.format(p.samples)} lecturas</p><div class="history-percent"><div><strong>${percent(p.empty)}</strong><span>de las consultas, sin bicis</span></div><div><strong>${percent(p.full)}</strong><span>de las consultas, sin huecos</span></div></div><div class="hour-chart" role="img" aria-label="Bicis disponibles de media por hora de Londres. Los valores completos están en la tabla.">${p.hours.map((r,h)=>`<div class="hour-bar ${r?'':'missing'}" ${r?`title="${h}:00 · ${small(r[0])} bicis y ${small(r[1])} huecos de media · ${r[3]} días observados"`:''}><i style="--height:${r?r[0]/maximum*100:0}%"></i>${h%6===0?`<span>${String(h).padStart(2,'0')}h</span>`:''}</div>`).join('')}</div><p class="chart-label">Bicis disponibles de media en cada hora. Una barra más alta significa más bicis.</p><dl class="peak-list">${spread>=.05?`<div><dt>Más llena de media</dt><dd>${highest.h}:00 · ${small(highest.r[0])} bicis</dd></div><div><dt>Más vacía de media</dt><dd>${lowest.h}:00 · ${small(lowest.r[0])} bicis</dd></div>`:'<div><dt>Perfil por horas</dt><dd>Sin diferencias claras</dd></div>'}${gain&&gain.delta>=.5?`<div><dt>Mayor subida media</dt><dd>${gain.from}–${gain.to}h · +${small(gain.delta)} bicis</dd></div>`:''}</dl><p class="status-note">Son patrones observados, no una garantía para tu próximo viaje.</p><details class="hour-details"><summary>Ver cifras por hora</summary><table><thead><tr><th>Hora</th><th>Bicis de media</th><th>Huecos de media</th></tr></thead><tbody>${p.hours.map((r,h)=>`<tr><td>${String(h).padStart(2,'0')}:00</td><td>${r?small(r[0]):'Sin datos'}</td><td>${r?small(r[1]):'Sin datos'}</td></tr>`).join('')}</tbody></table></details></section>`;
 }
+
+function connectionRecord(station) {
+  const record=connections?.stations[station.id];
+  return record && dockDistance(station,record)<.15 ? record : null;
+}
+function connectionPeriod() {
+  return connections ? new Intl.DateTimeFormat('es-ES',{month:'long',year:'numeric',timeZone:'UTC'}).format(new Date(connections.start+'T12:00:00Z')) : '';
+}
+function loadConnections() {
+  if (connections || connectionsRequest) return;
+  connectionsFailed=false;
+  connectionsRequest=readJSON('./data/connections.json').then(data=>{connections=data;renderDetail();}).catch(()=>{connectionsFailed=true;connectionsRequest=null;renderDetail();});
+}
+function renderConnections(station) {
+  const heading='<h3>Trayectos más habituales</h3>';
+  if (connectionsFailed) return `<section class="connections">${heading}<p class="muted">No se pudieron cargar los trayectos.</p><button id="retry-connections" class="text-button">Reintentar</button></section>`;
+  if (!connections) return `<section class="connections">${heading}<p class="muted">Cargando los trayectos de esta estación…</p></section>`;
+  const record=connectionRecord(station);
+  if (!record) return `<section class="connections">${heading}<p class="muted">No hay trayectos comparables para esta ubicación en ${connectionPeriod()}.</p></section>`;
+  const rows=record[routeDirection];
+  return `<section class="connections">${heading}<p class="period">Viajes registrados · ${connectionPeriod()}</p><div class="route-direction" role="group" aria-label="Sentido de los trayectos"><button data-direction="out" aria-pressed="${routeDirection==='out'}">Salen de aquí</button><button data-direction="in" aria-pressed="${routeDirection==='in'}">Llegan aquí</button></div><p class="route-caption">${routeDirection==='out'?`Desde ${esc(shortName(station))}: los cinco destinos más frecuentes.`:`Hasta ${esc(shortName(station))}: las cinco procedencias más frecuentes.`} Pulsa una fila para destacar su línea.</p><ol class="route-list">${rows.map(([id,trips],i)=>{const other=connections.stations[id];return `<li><button data-route="${esc(id)}" aria-pressed="${focusedRoute===id}"><span class="route-number">${i+1}</span><span class="route-name">${routeDirection==='out'?'A':'Desde'} ${esc(shortName(other))}<small>${esc(other.name.split(',').slice(1).join(',').trim())}</small></span><strong>${number.format(trips)}<small>viajes</small></strong></button></li>`;}).join('')}</ol>${rows.length?'<button id="show-connections" class="text-button">Ver estas conexiones en el mapa</button><p class="route-caption">Más grosor = más viajes. Las líneas unen estaciones; no son recorridos por calles.</p>':'<p class="muted">Sin viajes registrados con otras estaciones en este sentido.</p>'}</section>`;
+}
+function revealMap() {
+  if (window.matchMedia('(max-width:800px)').matches) document.querySelector('.map-wrap').scrollIntoView({block:'start'});
+}
+function focusConnection(id,reveal=false) {
+  focusedRoute=id;
+  for (const item of routeObjects) {
+    const active=id===item.id;
+    item.line.setStyle({opacity:active ? .95 : .2,weight:item.weight+(active?2:0)});
+    item.pin.setOpacity(active ? 1 : .5);
+    item.arrow.setOpacity(active ? 1 : .3);
+    item.pin.getElement()?.classList.toggle('is-focused',active);
+    if(active)item.pin.openTooltip();else item.pin.closeTooltip();
+  }
+  document.querySelectorAll('[data-route]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.route===id)));
+  if(reveal)revealMap();
+}
+function drawConnections() {
+  routeLayer.clearLayers();routeObjects=[];$('route-key').hidden=true;
+  const station=stations.find(s=>s.id===selected),record=station&&connectionRecord(station);
+  if (!record) return;
+  const rows=record[routeDirection];
+  if (!rows.length) return;
+  const maximum=Math.max(...rows.map(r=>r[1]));
+  for (const [i,[id,trips]] of rows.entries()) {
+    const other=connections.stations[id];
+    const from=routeDirection==='out'?record:other,to=routeDirection==='out'?other:record;
+    const title=`${esc(shortName(from))} → ${esc(shortName(to))} · ${number.format(trips)} viajes (${connectionPeriod()})`;
+    const weight=2+4*trips/maximum;
+    const line=L.polyline([[from.lat,from.lon],[to.lat,to.lon]],{pane:'connections',className:'typical-route',color:'#234f83',weight,opacity:.75}).addTo(routeLayer);
+    const pin=L.marker([other.lat,other.lon],{autoPanOnFocus:false,icon:L.divIcon({className:'route-pin',html:`<span>${i+1}</span>`,iconSize:[24,24],iconAnchor:[12,12]}),title:other.name,alt:`Conexión ${i+1}: ${other.name}`}).bindTooltip(title,{direction:'top',offset:[0,-12]}).addTo(routeLayer);
+    pin.getElement().setAttribute('aria-label',`Conexión ${i+1}: ${from.name} a ${to.name}, ${trips} viajes`);
+    const a=map.project([from.lat,from.lon],0),b=map.project([to.lat,to.lon],0);
+    const angle=Math.atan2(b.y-a.y,b.x-a.x)*180/Math.PI;
+    const point=map.unproject(L.point(a.x+(b.x-a.x)*.62,a.y+(b.y-a.y)*.62),0);
+    const arrow=L.marker(point,{interactive:false,keyboard:false,pane:'connections',icon:L.divIcon({className:'route-arrow',html:`<svg viewBox="0 0 14 14" aria-hidden="true" style="transform:rotate(${angle}deg)"><path d="M2 1L12 7L2 13L4 7Z" fill="#234f83" stroke="white" stroke-width="1.5"/></svg>`,iconSize:[16,16],iconAnchor:[8,8]})}).addTo(routeLayer);
+    line.on('click',()=>focusConnection(id));pin.on('click',()=>focusConnection(id));
+    routeObjects.push({id,line,pin,arrow,weight});
+  }
+  L.circleMarker([record.lat,record.lon],{pane:'connections',radius:8,color:'white',weight:2,fillColor:'#203443',fillOpacity:1,interactive:false}).bindTooltip(routeDirection==='out'?'Salida':'Llegada',{permanent:true,direction:'bottom',offset:[0,10],className:'route-origin'}).addTo(routeLayer);
+  $('route-key').textContent=routeDirection==='out'?'Salen de la estación elegida · más grosor, más viajes':'Llegan a la estación elegida · más grosor, más viajes';
+  $('route-key').hidden=false;
+  if(focusedRoute && rows.some(r=>r[0]===focusedRoute))focusConnection(focusedRoute);
+}
+
 function renderDetail() {
   $('browse').hidden=selected!==null;$('detail').hidden=selected===null;
-  if (selected===null) return;
+  if (selected===null) {drawConnections();return;}
   const s=stations.find(s=>s.id===selected);
   if (!s) {selected=null;renderDetail();return;}
   const okay=valid(s),inactive=!s.installed||s.locked;
   const unavailable=okay?s.capacity-s.bikes-s.free:0;
-  $('detail').innerHTML=`<button id="back" class="back">← Todas las estaciones</button><h2>${esc(shortName(s))}</h2><p class="area">${esc(s.name.split(',').slice(1).join(',').trim())}</p><div class="availability"><div><strong>${okay?s.bikes:'—'}</strong><span>bicis disponibles</span></div><div><strong>${okay?s.free:'—'}</strong><span>huecos para aparcar</span></div></div>${okay?`<div class="capacity" aria-hidden="true"><i class="bikes" style="width:${s.bikes/s.capacity*100}%"></i><i class="free" style="width:${s.free/s.capacity*100}%"></i><i class="broken" style="width:${unavailable/s.capacity*100}%"></i></div><p class="status-note">${s.capacity} plazas totales${unavailable?` · ${unavailable} fuera de servicio`:''}</p>`:''}<p class="status-label ${!okay||s.bikes===0||s.free===0?'problem':''}">${inactive?'Estación cerrada o bloqueada':!okay?'TfL no ofrece disponibilidad fiable':s.bikes===0?'No hay bicis para sacar':s.free===0?'No quedan huecos para aparcar':'Hay bicis y huecos libres'}</p><p class="status-note">${isLive?'Consulta actual':'Copia guardada'} de TfL: ${stamp(live.captured)}.<br>${s.modified?`Último cambio comunicado: ${stamp(s.modified)}.`:''}</p>${renderHistory(s)}`;
+  $('detail').innerHTML=`<button id="back" class="back">← Todas las estaciones</button><h2>${esc(shortName(s))}</h2><p class="area">${esc(s.name.split(',').slice(1).join(',').trim())}</p><div class="availability"><div><strong>${okay?s.bikes:'—'}</strong><span>bicis disponibles</span></div><div><strong>${okay?s.free:'—'}</strong><span>huecos para aparcar</span></div></div>${okay?`<div class="capacity" aria-hidden="true"><i class="bikes" style="width:${s.bikes/s.capacity*100}%"></i><i class="free" style="width:${s.free/s.capacity*100}%"></i><i class="broken" style="width:${unavailable/s.capacity*100}%"></i></div><p class="status-note">${s.capacity} plazas totales${unavailable?` · ${unavailable} fuera de servicio`:''}</p>`:''}<p class="status-label ${!okay||s.bikes===0||s.free===0?'problem':''}">${inactive?'Estación cerrada o bloqueada':!okay?'TfL no ofrece disponibilidad fiable':s.bikes===0?'No hay bicis para sacar':s.free===0?'No quedan huecos para aparcar':'Hay bicis y huecos libres'}</p><p class="status-note">${isLive?'Consulta actual':'Copia guardada'} de TfL: ${stamp(live.captured)}.<br>${s.modified?`Último cambio comunicado: ${stamp(s.modified)}.`:''}</p>${renderConnections(s)}${renderHistory(s)}`;
+  const retry=$('retry-connections');if(retry)retry.onclick=()=>{loadConnections();renderDetail();};
+  document.querySelectorAll('[data-direction]').forEach(button=>button.onclick=()=>{routeDirection=button.dataset.direction;focusedRoute=null;renderDetail();});
+  document.querySelectorAll('[data-route]').forEach(button=>button.onclick=()=>focusConnection(button.dataset.route,true));
+  const show=$('show-connections');if(show)show.onclick=()=>{const record=connectionRecord(s);map.fitBounds([record,...record[routeDirection].map(([id])=>connections.stations[id])].map(p=>[p.lat,p.lon]),{padding:[45,45],maxZoom:16});revealMap();};
+  drawConnections();
   $('back').onclick=()=>{previous=selected;selected=null;renderDetail();updateMarkers();historyURL();};
 }
 function historyURL() {const query=selected?`?station=${encodeURIComponent(selected)}`:'';window.history.replaceState(null,'',location.pathname+query);}
 function selectStation(id,pan=false) {
-  selected=id;$('search').value='';$('results').replaceChildren();renderDetail();updateMarkers();historyURL();
+  selected=id;focusedRoute=null;routeDirection='out';loadConnections();$('search').value='';$('results').replaceChildren();renderDetail();updateMarkers();historyURL();
   if (pan) {const s=stations.find(s=>s.id===id);map.panTo([s.lat,s.lon]);}
 }
 function search() {
