@@ -2,12 +2,55 @@
 
 **UCL Complex Networks — reproducible Transport for London open-data project.**
 
-Model docking stations as nodes and completed cycle-hire journeys as **directed, weighted origin–destination (OD) edges**. Produce an interactive HTML map, with inbound/outbound flows and a station matching quality report. **Lines connect origins and destinations; they are not inferred GPS cycling routes.**
+Model docking stations as nodes and completed cycle-hire journeys as **directed, weighted origin–destination (OD) edges**. Explore a published static atlas or produce a standalone interactive HTML map, with inbound/outbound flows and a station matching quality report. **Lines connect origins and destinations; they are not inferred GPS cycling routes.**
+
+## Explore the atlas
+
+**[Open London, by bike →](https://aleetreny.github.io/santander-cycles-network/)**
+
+A static, responsive network explorer with **801 available stations**, **857,151 mapped journeys** and **212,532 directed connections**, based on **1–31 May 2026**. May is the newest complete dated month found in TfL's public archive at build time (20 October 2026). This is a pinned study, not live traffic. Both endpoints are matched for **99.32%** of valid journeys.
+
+- Click a station or search a street/area to see its busiest outgoing and incoming connections.
+- Compare weekdays and weekends, morning (07–10), evening (16–19), or all hours.
+- Rank stations by activity or distinct neighbours. Colour the map by four weighted Louvain communities.
+- Read **The study** for hub concentration, daily rhythms, communities, a static station-removal experiment, coverage and limitations.
+- Download all station coordinates, full weighted OD edges, unmatched station names, metrics and source checksums from the study.
+
+The map displays only the strongest 80 non-return links initially; the slider changes visual density only. All available current stations remain on the map. Counts and graph measures always use the complete selected network.
+
+### Rebuild the published dataset
+
+```bash
+python3.12 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements-study.txt
+python -m cycles.publish --year 2026 --month 5
+python3 -m http.server 4173 --directory site
+```
+
+The monthly publisher discovers overlapping dated extracts, downloads just those files, captures current stations, normalizes and deduplicates records, checks that every calendar date is present, and exports nine day/time network slices. `--export-only` reuses downloaded, prepared inputs and the local station snapshot. A fresh API snapshot may change matches; the shipped `site/data/stations.csv` preserves the exact coordinates used for this release. Source byte sizes, ETags, SHA-256 hashes, snapshot time, settings and package versions are recorded in `site/data/meta.json`.
+
+```bash
+pip install -r requirements-dev.txt
+pytest -q                         # includes published-data conservation checks
+npm install
+npx playwright install chromium
+npm run check
+npm run test:browser              # with the local HTTP server running
+```
+
+Browser checks cover desktop/mobile layouts, filters, station search, direction switching, communities, study navigation and a failed-data recovery state. Screenshots go to ignored `artifacts/`. Set `ATLAS_URL` to test another deployment.
+
+### Publish
+
+Pushing changes under `site/` to `main` triggers `.github/workflows/pages.yml`. GitHub Pages uses the **GitHub Actions** source. It uploads the static `site/` folder; no API keys, application server or build step are needed. The separate check workflow runs the Python regression tests. Journey aggregates are deliberately versioned; raw extracts (~144 MB for this month) and processed Parquet stay ignored locally. No automatic data refresh is configured.
+
+Map tiles are provided by OpenStreetMap and need an internet connection. Leaflet and fonts are self-hosted, with their licence files in `site/`. This is an independent educational project, not an official TfL or Santander product.
 
 ## Data sources
 
 - [TfL historical cycle hire journey CSVs](https://cycling.data.tfl.gov.uk/) — weekly/fortnightly extracts from September 2015. Direct public S3 listing: `https://s3-eu-west-1.amazonaws.com/cycling.data.tfl.gov.uk/?list-type=2&prefix=usage-stats/` (no authentication).
-- [TfL BikePoint Unified API](https://api.tfl.gov.uk/BikePoint) — current station coordinates and metadata. Live availability may require station-specific API calls; not a historic inventory.
+- [TfL BikePoint Unified API](https://api.tfl.gov.uk/BikePoint) — current station coordinates, docking capacity, current availability. Not a historic inventory.
 
 TfL attribution: **Powered by TfL Open Data. Contains OS data © Crown copyright and database rights 2016; Geomni UK Map data © and database rights 2019.** See [TfL transport-data terms](https://tfl.gov.uk/corporate/terms-and-conditions/transport-data-service). Data copyright/licence remains with original owners. Code herein is MIT-licensed.
 
@@ -25,10 +68,6 @@ python -m cycles network         # build OD graph across every prepared file
 python -m cycles map --top 150   # create outputs/network_map.html
 open outputs/network_map.html
 ```
-
-### Run a sample map entirely in GitHub (no local installation)
-
-Go to [Actions → Build sample TfL network map](https://github.com/aleetreny/santander-cycles-network/actions/workflows/build-sample-map.yml), select **Run workflow**, and accept the defaults (2025; 4 historical extracts). When the run completes, download the **santander-cycles-network-sample** artifact (ZIP). Inside you will find `network_map.html`, OD edges, node metrics and station-match coverage. Open the HTML in a browser with an internet connection for map tiles. This sample is **not** the full historical archive and GitHub Actions artifacts expire after 14 days.
 
 ### Download the entire available historical archive
 
@@ -51,7 +90,7 @@ Useful options: `network --year 2026 --month 9 --day-type weekday`; `network --s
 cycles/acquire.py      S3 public XML inventory, concurrent downloads, BikePoint API snapshots
 cycles/prepare.py      CSV schema adaptation (2015–2026), timestamp cleanup, Parquet
 cycles/network.py      de-duplicated directed OD aggregation, station geocoding, QA
-cycles/viz.py          interactive HTML map using Folium (map tiles require internet)
+cycles/viz.py          standalone Folium HTML (map tiles need internet)
 cycles/__main__.py     CLI
 requirements.txt       locked major ranges
 tests/                 schema and API regression tests

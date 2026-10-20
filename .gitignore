@@ -3,7 +3,7 @@ __pycache__/
 .pytest_cache/
 .DS_Store
 *.py[cod]
-# Never commit TfL raw journey archives or generated datasets.
+# Large TfL datasets and user-generated derived outputs must never be pushed to git.
 data/raw/
 data/processed/
 data/stations/
@@ -12,3 +12,5 @@ outputs/
 *.duckdb
 *.parquet
 *.zip
+node_modules/
+artifacts/

@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>London, by bike. — Santander Cycles network atlas</title>
+  <meta name="description" content="Explore London's Santander Cycles as a network. Real TfL journeys, every available docking station, and the connections that bring the city together.">
+  <meta name="theme-color" content="#172c3d">
+  <link rel="icon" type="image/svg+xml" href="./favicon.svg">
+  <link rel="stylesheet" href="./fonts.css"><link rel="stylesheet" href="./vendor/leaflet.css"><link rel="stylesheet" href="./style.css">
+  <script src="./vendor/leaflet.js" defer></script><script src="./app.js" type="module"></script>
+</head>
+<body>
+<a class="skip-link" href="#explorer">Skip to explorer</a>
+<header class="masthead">
+  <a class="identity" href="./" aria-label="London by bike home"><svg viewBox="0 0 48 30" aria-hidden="true"><circle cx="11" cy="19" r="8"/><circle cx="37" cy="19" r="8"/><path d="m11 19 9-15 9 15H11l6-11h16l4 11M17 4h7M30 2h6"/></svg><span>London, by bike<span class="brand-dot">.</span></span></a>
+  <nav aria-label="Main navigation"><button id="map-tab" class="nav-tab active" aria-pressed="true">Explore the map</button><button id="study-tab" class="nav-tab" aria-pressed="false">The study</button><a class="source-link" href="https://github.com/aleetreny/santander-cycles-network" target="_blank" rel="noopener">Source <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 12 12 4M4 4h8v8"/></svg></a></nav>
+</header>
+<main id="explorer" tabindex="-1">
+  <aside class="sidebar" aria-label="Network explorer">
+    <div class="intro"><h1><span>A city.</span> <span>A thousand</span> <span>connections.</span></h1><p>London’s Santander Cycles,<br>seen as a living network.</p><div class="dataset-label"><span class="date-mark"></span><span id="period-label">Loading TfL data…</span></div></div>
+    <div class="search-wrap"><label for="station-search">Find a docking station</label><div class="search-field"><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5"/><path d="m13 13 4 4"/></svg><input id="station-search" type="search" placeholder="Try Waterloo or Hyde Park" autocomplete="off" aria-controls="search-results"><kbd aria-hidden="true">/</kbd></div><div id="search-results" aria-live="polite"></div></div>
+    <div id="station-panel" hidden></div>
+    <section id="ranking-panel" class="ranking"><div class="section-head"><h2>The busiest stations</h2><select id="rank-by" aria-label="Rank stations by"><option value="activity">By activity</option><option value="degree">By connections</option></select></div><p class="small-copy" id="ranking-description">Arrivals + departures in this period</p><ol id="station-ranking"></ol><p class="selection-hint">Choose a station to trace its connections.</p></section>
+    <div class="sidebar-foot"><span>One station. Many stories.</span><button id="study-link">Read the network study <span aria-hidden="true">↗</span></button></div>
+  </aside>
+  <section class="map-area" aria-label="Interactive London station network">
+    <div class="map-toolbar"><div class="filter-group"><label for="day-filter">Days</label><select id="day-filter"><option value="all">Every day</option><option value="weekday">Weekdays</option><option value="weekend">Weekends</option></select></div><div class="filter-group"><label for="time-filter">Start time</label><select id="time-filter"><option value="all">All hours</option><option value="am">Morning · 07–10</option><option value="pm">Evening · 16–19</option></select></div><fieldset class="map-mode"><legend class="sr-only">Colour stations by</legend><button id="activity-mode" class="selected" aria-pressed="true">Activity</button><button id="community-mode" aria-pressed="false">Communities</button></fieldset></div>
+    <div class="map-canvas"><div id="map" aria-label="Map of London docking stations. Use search or station lists for keyboard selection."></div><div id="map-status" role="status" class="map-status">Preparing the network…</div><button id="reset-view" class="reset-view" title="Show all stations" aria-label="Show all stations"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5M9 12h6m-3-3v6"/></svg></button>
+    <div class="map-key" id="map-key"><div class="key-title">Reading the map <button id="legend-toggle" aria-expanded="true" aria-controls="legend-body" aria-label="Collapse map legend">−</button></div><div id="legend-body"><div class="size-key"><span class="dot small-dot"></span><span class="dot medium-dot"></span><span class="dot large-dot"></span><span>More activity, larger station</span></div><div class="line-key"><span></span><p>Thicker link, more journeys</p></div><p class="key-note">Links join stations. They are not street routes.</p><div id="community-key" hidden></div></div></div>
+    <div class="map-caption"><span id="edge-caption">Showing the strongest connections</span><label for="edge-limit">Links <input id="edge-limit" type="range" min="0" max="200" step="20" value="80"><output id="edge-output">80</output></label></div>
+    </div>
+    <div class="network-summary" aria-live="polite"><div><strong id="journey-total">—</strong><span>mapped journeys</span></div><div><strong id="station-total">—</strong><span>stations on the map</span></div><div><strong id="connection-total">—</strong><span>directed connections</span></div><button id="coverage-link"><span id="coverage-number">—</span> of valid journeys mapped <span aria-hidden="true">↗</span></button></div>
+  </section>
+</main>
+<section id="study" class="study" hidden aria-labelledby="study-title" tabindex="-1"></section>
+<noscript><p class="noscript">Enable JavaScript to explore the map. You can also download the <a href="./data/stations.csv">station list</a> and <a href="./data/flows.csv">journey connections</a>.</p></noscript>
+</body>
+</html>

@@ -1,0 +1,6 @@
+# Exact analysis versions used for the published May 2026 snapshot.
+-r requirements.txt
+pandas==2.3.3
+duckdb==1.4.5
+networkx==3.2.1
+pyarrow==21.0.0
