@@ -14,3 +14,5 @@ outputs/
 *.zip
 node_modules/
 artifacts/
+data/occupancy/
+_site/

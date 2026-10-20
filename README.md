@@ -4,57 +4,52 @@
 
 Model docking stations as nodes and completed cycle-hire journeys as **directed, weighted origin–destination (OD) edges**. Explore a published static atlas or produce a standalone interactive HTML map, with inbound/outbound flows and a station matching quality report. **Lines connect origins and destinations; they are not inferred GPS cycling routes.**
 
-## Explore the atlas
+## Open the station map
 
-**[Open London, by bike →](https://aleetreny.github.io/santander-cycles-network/)**
+**[Londres en bici →](https://aleetreny.github.io/santander-cycles-network/)**
 
-A static, responsive network explorer with **801 available stations**, **857,151 mapped journeys** and **212,532 directed connections**, based on **1–31 May 2026**. May is the newest complete dated month found in TfL's public archive at build time (20 October 2026). This is a pinned study, not live traffic. Both endpoints are matched for **99.32%** of valid journeys.
+The published interface is deliberately simple: one map, a station search and a station sheet. Drag the map, zoom with the mouse wheel or +/−, and select a station. Selecting a marker never resets the camera. Search centres the chosen station without changing zoom.
 
-- Click a station or search a street/area to see its busiest outgoing and incoming connections.
-- Read every connection as a count of recorded trips, its share of departures/arrivals, average trips per observed day and median hire time. Numbered coloured pins match the ranked route list; clicking a connection keeps the origin selected.
-- Compare weekdays/weekends, morning (07–10), daytime (10–16), evening (16–19), night (19–07) or all hours, for all bikes, classic bikes or electric bikes.
-- Narrow displayed links by straight-line dock distance, within/across-community connections and minimum trip count; display totals or daily averages. Link filters do not change the denominator used for route shares.
-- Rank stations by activity or distinct neighbours. Colour the map by four weighted Louvain communities.
-- Read **The study** for hub concentration, daily rhythms, communities, a static station-removal experiment, coverage and limitations.
-- Download all station coordinates, full weighted OD edges, unmatched station names, metrics and source checksums from the study.
+- **Current availability:** bikes to hire, free docking spaces, unavailable docks and TfL timestamps. The browser requests BikePoint directly. If that request fails, it clearly labels the dated saved copy; it never calls that copy live.
+- **Typical availability:** September 2026, 30 London dates, 2,272,425 usable archived BikePoint readings. Each station shows its empty/full reading fractions, hourly mean bikes/free docks, fullest/emptiest average hour and largest increase between adjacent hourly means.
+- **Two useful rankings:** stations most often observed without bikes, and stations most often observed without free docks. These are observed-reading percentages, not exact time percentages.
 
-The map displays only the strongest 80 non-return links initially; the slider changes visual density only. All available current stations remain on the map. Counts and graph measures always use the complete selected network.
+There are no OD lines, animations, community controls or study overlays in the published map. The original network research pipeline and its frozen May 2026 exports remain in the repository for reproducibility. They are excluded from the Pages artifact.
 
-### Rebuild the published dataset
+### Run and verify
 
 ```bash
-python3.12 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements-study.txt
-python -m cycles.publish --year 2026 --month 5
-python -m cycles.atlas              # compact views and lazy station detail
 python3 -m http.server 4173 --directory site
+npm run check
+pip install -r requirements-dev.txt
+pytest -q
 ```
 
-The 45 interactive slices load a small overview first and fetch one station’s routes on selection. The full edge CSV remains downloadable; the browser never needs to load it or the legacy full-network JSON to draw the atlas. Canvas station markers are reused across interactions, and the study module loads only when opened.
+Open `http://127.0.0.1:4173/`. The user-facing interactions are verified manually in the browser; see [manual QA](docs/MANUAL_QA.md). The older `tests/browser.cjs` targets the retired network interface and is retained only as historical research tooling; it is not a check of the current page.
 
-The monthly publisher discovers overlapping dated extracts, downloads just those files, captures current stations, normalizes and deduplicates records, checks that every calendar date is present, and exports nine day/time network slices. `--export-only` reuses downloaded, prepared inputs and the local station snapshot. A fresh API snapshot may change matches; the shipped `site/data/stations.csv` preserves the exact coordinates used for this release. Source byte sizes, ETags, SHA-256 hashes, snapshot time, settings and package versions are recorded in `site/data/meta.json`.
+### Rebuild availability statistics
 
 ```bash
-pip install -r requirements-dev.txt
-pytest -q                         # includes published-data conservation checks
-npm install
-npx playwright install chromium
-npm run check
-npm run test:browser              # with the local HTTP server running
+pip install -r requirements-study.txt
+python -m cycles.occupancy --month 2026-09
+# Reuse the same downloaded files and pinned source revision:
+python -m cycles.occupancy --month 2026-09 --offline
 ```
 
-Browser checks cover desktop/mobile layouts, explicit route units and denominators, numbered pins, route selection that preserves the origin, bike/time/day filters, display-only link filters, daily rates, play/pause, reduced motion, study presets and retry after a failed detail fetch. Data checks conserve every arrival and departure across all 45 slices. Screenshots go to ignored `artifacts/`. Set `ATLAS_URL` to test another deployment.
+The exporter includes the preceding UTC day, selects the exact London calendar month, rejects impossible counters and zero usable docks, deduplicates station/timestamp readings, and joins versioned station references by UTC source date. Hourly means give each observed date equal weight. Hours with fewer than three observed dates remain missing. The UI requires at least 14 dates and 100 readings, and a historic location within 150 m of the current station. The archive lacks historical locked status; this limitation is visible in the source disclosure.
+
+Inputs remain ignored under `data/occupancy/`. Outputs include source URLs, the pinned Hugging Face revision, SHA-256 hashes, raw/retained row counts and all observed dates. Availability data and derived statistics are **CC BY-SA 3.0**, attributed to TfL and Francisco Feregrino. Code is MIT.
+
+`site/data/live.json` is a dated fallback, not an automatic collector. It is generated with `cycles.occupancy.compact_live` from a real BikePoint response. Current data are requested whenever the page opens and when **Actualizar disponibilidad** is pressed. No background scheduler is configured.
 
 ### Publish
 
-Pushing changes under `site/` to `main` triggers `.github/workflows/pages.yml`. GitHub Pages uses the **GitHub Actions** source. It uploads the static `site/` folder; no API keys, application server or build step are needed. The separate check workflow runs the Python regression tests. Journey aggregates are deliberately versioned; raw extracts (~144 MB for this month) and processed Parquet stay ignored locally. No automatic data refresh is configured.
-
-Map tiles are provided by OpenStreetMap and need an internet connection. Leaflet and fonts are self-hosted, with their licence files in `site/`. This is an independent educational project, not an official TfL or Santander product.
+Pushing `site/` changes to `main` triggers `.github/workflows/pages.yml`. Pages stages only the current page, its assets and the three availability JSON files; it does not upload legacy journey exports. No backend or API keys are needed. Map tiles need an internet connection. Leaflet and fonts are self-hosted with their licences.
 
 ## Data sources
 
 - [TfL historical cycle hire journey CSVs](https://cycling.data.tfl.gov.uk/) — weekly/fortnightly extracts from September 2015. Direct public S3 listing: `https://s3-eu-west-1.amazonaws.com/cycling.data.tfl.gov.uk/?list-type=2&prefix=usage-stats/` (no authentication).
+- [Availability archive: feregrino/london-cycles](https://huggingface.co/datasets/feregrino/london-cycles) — versioned TfL station observations; CC BY-SA 3.0.
 - [TfL BikePoint Unified API](https://api.tfl.gov.uk/BikePoint) — current station coordinates, docking capacity, current availability. Not a historic inventory.
 
 TfL attribution: **Powered by TfL Open Data. Contains OS data © Crown copyright and database rights 2016; Geomni UK Map data © and database rights 2019.** See [TfL transport-data terms](https://tfl.gov.uk/corporate/terms-and-conditions/transport-data-service). Data copyright/licence remains with original owners. Code herein is MIT-licensed.

@@ -1,11 +1,7 @@
-# London, by bike
+# Londres en bici
 
-An independent educational atlas of Santander Cycles for a UCL Complex Networks project. A visitor should immediately understand the station network, find any station, and explore which stations exchange most journeys. The project must be visually distinctive yet simple, grounded in real TfL open data, and hosted publicly on GitHub Pages.
+The user explicitly replaced the complex network atlas with a simple station map. Primary task: move and zoom freely, select a station, and understand available bikes, free docks and typical hourly availability. Spanish interface.
 
-Audience: student researcher and curious Londoner. Scene: laptop map exploration, occasional phone visit. Primary job: click a station and understand its connections; secondary job: compare temporal networks and read a defensible study.
+One map, a search field, a station list and a station sheet. Only three list orders: availability, frequently without bikes, frequently without docks. No route overlays, play controls, study drawer or advanced filters. Keep the network research pipeline and frozen exports separately in the repository.
 
-User commitments: all available stations as nodes; directed links weighted by recorded hires; clear map; beautiful restrained interface; proceed autonomously and publish directly. No invented traffic, no overwhelming controls, no street route claims, no official TfL branding.
-
-Assumptions delegated by user: English interface for the London/UCL audience; latest complete usable month rather than downloading the entire multigigabyte archive; fixed published snapshot with reproducible refresh command. Raw inputs remain local, compact aggregated outputs are public.
-
-Platform: web. Data availability and station-match limitations must be visible. Prefer a static app with no credentials or backend. Keep the existing Python acquisition/cleanup CLI.
+Use actual BikePoint observations, not inferred occupancy from journey flows. Distinguish a current API query from a dated fallback. Expose September 2026 availability profiles and their sampling limitations. Publish to GitHub Pages and exercise the actual UI by hand before and after deployment.
