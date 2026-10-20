@@ -25,4 +25,8 @@
 
 ## Production
 
-Pending deployment and the same core manual interactions on the published URL.
+Published app commit `783a828` at https://aleetreny.github.io/santander-cycles-network/. Pages run `39448734794` and data checks run `39448734852` both succeeded.
+
+Repeated the core checks by hand on the public page: + from 12→13→14→15, − back to 12, wheel 12→14→12, and drag from centre 51.515046,-0.129948 to 51.544093,-0.230198. Search/Enter opened Waterloo Station 3 with actual TfL availability and the correct September hourly profile. Both ranking modes displayed the expected first stations; Strata opened with 33% of readings without free docks.
+
+At 390×844, searched Margery Street, opened the sheet, tested +/− and drag, and scrolled the full station statistics. Restored the normal viewport and checked the final desktop view. No browser JavaScript errors were reported. Explicitly reloaded the user's other existing tab, which had retained the old atlas, and verified the new Spanish map. Saved the public-page screenshot locally to `artifacts/simple-production.png`.
