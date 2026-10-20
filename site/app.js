@@ -1,243 +1,68 @@
-const $ = (id) => document.getElementById(id);
-const fmt = (n) => new Intl.NumberFormat('en-GB').format(n);
-const pct = (n, digits = 1) => `${(n * 100).toFixed(digits)}%`;
-const esc = (s) => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const palette = ['#c64735','#267b76','#5e65a6','#a77723','#ac5781','#347fa5','#687c34','#86614b','#3d7596','#935d80'];
-const area = (s) => s.name.includes(',') ? s.name.split(',').at(-1).trim() : 'London';
-const shortName = (s) => s.name.split(',')[0];
-const initial = new URLSearchParams(location.search);
-const state = {day:['all','weekday','weekend'].includes(initial.get('days')) ? initial.get('days') : 'all', time:['all','am','pm'].includes(initial.get('time')) ? initial.get('time') : 'all', mode:initial.get('colour') === 'communities' ? 'communities' : 'activity', selected:null, direction:'out', limit:80, rank:'activity'};
-let meta, stations, edges = [], activity = [], arrivals = [], departures = [], partners = [], map, nodes, flows, markers = [], labels = [], activeRequest = 0, tileErrors = 0;
-const cache = new Map();
-const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-async function readJSON(url) {
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(`Could not load ${url} (${response.status})`);
-  return response.json();
+const $=id=>document.getElementById(id);
+const number=new Intl.NumberFormat('en-GB');
+const fmt=n=>number.format(n);
+const pct=(n,d=n>0&&n<.01?2:1)=>`${(n*100).toFixed(d)}%`;
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const colours=['#c64735','#267b76','#946718','#26769b','#7859a7'];
+const groupColours=['#c64735','#267b76','#5e65a6','#a77723'];
+const shortName=s=>s.name.split(',')[0];
+const area=s=>s.name.includes(',')?s.name.split(',').at(-1).trim():'London';
+const params=new URLSearchParams(location.search);
+const pick=(key,choices,fallback)=>choices.includes(params.get(key))?params.get(key):fallback;
+const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
+const state={day:pick('days',['all','weekday','weekend'],'all'),time:pick('time',['all','am','day','pm','night'],'all'),bike:pick('bike',['all','classic','electric'],'all'),mode:pick('colour',['activity','communities'],'activity'),direction:pick('direction',['out','in'],'out'),distance:pick('distance',['all','short','medium','long'],'all'),relation:pick('relation',['all','within','across'],'all'),minimum:Number(pick('minimum',['1','5','10','25','50'],'1')),unit:pick('unit',['total','daily'],'total'),selected:null,focused:null,limit:80,rank:'activity',animate:false};
+let meta,stations,studyData,view,detail,map,nodeRenderer,flowRenderer,flowLayer,pinLayer,markers=[],flowPaths=[],request=0,studyBuilt=false,studyPromise,ready=false,loadedKey=null;
+const responses=new Map();
+const viewKey=()=>`${state.day}-${state.time}-${state.bike}`;
+const periodText=()=>`${{all:'Every day',weekday:'Weekdays',weekend:'Weekends'}[state.day]} · ${{all:'all hours',am:'07–10',day:'10–16',pm:'16–19',night:'19–07'}[state.time]} · ${{all:'all bikes',classic:'classic bikes',electric:'electric bikes'}[state.bike]}`;
+const dayWord=()=>state.day==='weekday'?'weekday':state.day==='weekend'?'weekend day':'day';
+const daily=n=>(n/view.days).toFixed(n>0&&n/view.days<1?2:n/view.days<100?1:0);
+const routeUnit=n=>state.unit==='daily'?`${daily(n)} trips/${dayWord()}`:`${fmt(n)} ${n===1?'trip':'trips'}`;
+function json(url){if(!responses.has(url)){responses.set(url,fetch(url).then(r=>{if(!r.ok)throw Error(`${url}: ${r.status}`);return r.json();}).catch(e=>{responses.delete(url);throw e;}));}return responses.get(url);}
+function status(text,retry=false){$('map-status').textContent=text;if(retry){const b=document.createElement('button');b.textContent='Try again';b.onclick=()=>ready?refresh():location.reload();$('map-status').append(' ',b);}}
+function syncURL(){const q=new URLSearchParams();for(const [key,value,def] of [['days',state.day,'all'],['time',state.time,'all'],['bike',state.bike,'all'],['colour',state.mode,'activity'],['direction',state.direction,'out'],['distance',state.distance,'all'],['relation',state.relation,'all'],['minimum',String(state.minimum),'1'],['unit',state.unit,'total']])if(value!==def)q.set(key,value);if(state.selected!==null)q.set('station',stations[state.selected].id);if(state.focused!==null)q.set('route',stations[state.focused].id);history.replaceState(null,'',`${location.pathname}${q.size?'?'+q:''}${location.hash}`);}
+function distance(a,b){const p=stations[a],q=stations[b],rad=Math.PI/180,x=(q.lat-p.lat)*rad,y=(q.lon-p.lon)*rad;return 12742*Math.asin(Math.min(1,Math.sqrt(Math.sin(x/2)**2+Math.cos(p.lat*rad)*Math.cos(q.lat*rad)*Math.sin(y/2)**2)));}
+function matches(a,b,w){if(a===b||w<state.minimum)return false;const d=distance(a,b),bucket=d<1?'short':d<3?'medium':'long';const relation=stations[a].community===stations[b].community?'within':'across';return (state.distance==='all'||state.distance===bucket)&&(state.relation==='all'||state.relation===relation);}
+function allRoutes(){if(state.selected===null||!detail||detail.id!==stations[state.selected].id||loadedKey!==viewKey())return [];return detail.segments[viewKey()][state.direction].filter(([i,w])=>matches(state.selected,i,w));}
+function displayed(){if(!view)return [];if(state.selected===null)return view.links[`${state.distance}-${state.relation}`].filter(e=>e[2]>=state.minimum).slice(0,state.limit);return allRoutes().slice(0,state.limit).map(([i,w,m])=>state.direction==='out'?[state.selected,i,w,m]:[i,state.selected,w,m]);}
+function denominator(){return state.direction==='out'?view.departures[state.selected]:view.arrivals[state.selected];}
+function colour(i){return state.mode==='communities'&&stations[i].community>=0?groupColours[stations[i].community%4]:'#c64735';}
+function tooltip(i){const div=document.createElement('div');div.innerHTML=`<strong>${esc(stations[i].name)}</strong><span>${fmt(view?.departures[i]||0)} trips started here<br>${fmt(view?.arrivals[i]||0)} trips ended here</span>`;return div;}
+function radius(i){const max=Math.max(1,...view.departures.map((n,i)=>n+view.arrivals[i]));return (2.2+6*Math.sqrt((view.departures[i]+view.arrivals[i])/max))*Math.min(1,Math.max(.45,(map.getZoom()-9)/3));}
+function initMap(){map=L.map('map',{zoomControl:false,minZoom:10,maxZoom:18,zoomSnap:.5,fadeAnimation:false,zoomAnimation:false,markerZoomAnimation:false,attributionControl:true});L.control.zoom({position:'topright'}).addTo(map);map.attributionControl.setPrefix('<a href="https://leafletjs.com">Leaflet</a>');L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'}).addTo(map).on('tileerror',()=>{$('map').dataset.tiles='unavailable';});
+  map.createPane('flows');map.getPane('flows').style.zIndex=410;map.createPane('stations');map.getPane('stations').style.zIndex=430;
+  nodeRenderer=L.canvas({pane:'stations',padding:.2});flowRenderer=L.svg({pane:'flows',padding:.2});flowLayer=L.layerGroup().addTo(map);pinLayer=L.layerGroup().addTo(map);
+  stations.forEach((s,i)=>{const m=L.circleMarker([s.lat,s.lon],{renderer:nodeRenderer,radius:3,weight:.8,color:'#fff',fillColor:'#c64735',fillOpacity:.8}).bindTooltip(()=>tooltip(i),{direction:'top',offset:[0,-3]}).on('click',()=>selectStation(i)).addTo(map);markers[i]=m;});
+  map.on('zoomend',()=>{if(view)updateNodes();});$('reset-view').onclick=()=>fitNetwork();fitNetwork();
 }
-function syncURL() {
-  const q = new URLSearchParams();
-  if (state.day !== 'all') q.set('days',state.day);
-  if (state.time !== 'all') q.set('time',state.time);
-  if (state.mode !== 'activity') q.set('colour',state.mode);
-  if (state.selected !== null) q.set('station',stations[state.selected].id);
-  history.replaceState(null,'',`${location.pathname}${q.size ? '?' + q : ''}${location.hash}`);
-}
-function status(message, retry = false) {
-  $('map-status').textContent = message;
-  if (retry) {
-    const button = document.createElement('button'); button.textContent = 'Try again';
-    button.onclick = () => meta ? loadSegment() : location.reload();
-    $('map-status').append(' ',button);
-  }
-}
-function initMap() {
-  map = L.map('map',{zoomControl:false, minZoom:10, maxZoom:18, zoomSnap:.5, scrollWheelZoom:true, attributionControl:true});
-  L.control.zoom({position:'topright'}).addTo(map);
-  map.attributionControl.setPrefix('<a href="https://leafletjs.com">Leaflet</a>');
-  const tiles = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom:19,attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-  }).addTo(map);
-  tiles.on('tileerror',() => { if (++tileErrors === 5) status('The street map is unavailable. Station locations and connections still work.'); });
-  tiles.on('load',() => { if (tileErrors < 5 && edges.length) status(''); });
-  map.createPane('flows'); map.getPane('flows').style.zIndex = 410;
-  map.createPane('stations'); map.getPane('stations').style.zIndex = 430;
-  flows = L.layerGroup().addTo(map); nodes = L.layerGroup().addTo(map);
-  map.on('zoomend',resizeNodes);
-  resetView();
-  $('reset-view').onclick = resetView;
-}
-function resetView() {
-  if (!stations) return;
-  map.fitBounds(stations.map(s => [s.lat,s.lon]),{padding:[30,30],animate:!reduced});
-}
-function calculate() {
-  arrivals = Array(stations.length).fill(0); departures = Array(stations.length).fill(0);
-  partners = stations.map(() => new Set());
-  for (const [a,b,w] of edges) {
-    departures[a] += w; arrivals[b] += w;
-    if (a !== b) { partners[a].add(b); partners[b].add(a); }
-  }
-  activity = arrivals.map((n,i) => n + departures[i]);
-}
-function nodeColour(i) { return state.mode === 'communities' && stations[i].community >= 0 ? palette[stations[i].community % palette.length] : '#c64735'; }
-function tooltip(i) {
-  const div = document.createElement('div');
-  const title = document.createElement('strong'); title.textContent = stations[i].name;
-  const text = document.createElement('span'); text.textContent = `${fmt(departures[i])} departures · ${fmt(arrivals[i])} arrivals`;
-  div.append(title,text); return div;
-}
-function curve(a,b) {
-  const p = stations[a], q = stations[b];
-  const dx = q.lon - p.lon, dy = q.lat - p.lat;
-  const bend = .10;
-  const cx = (p.lon + q.lon)/2 - dy*bend*1.6;
-  const cy = (p.lat + q.lat)/2 + dx*bend*.63;
-  return Array.from({length:17},(_,j) => {const t=j/16;return [(1-t)**2*p.lat+2*(1-t)*t*cy+t*t*q.lat,(1-t)**2*p.lon+2*(1-t)*t*cx+t*t*q.lon];});
-}
-function visibleEdges() {
-  let list = edges.filter(([a,b]) => a !== b);
-  if (state.selected !== null) list = list.filter(([a,b]) => state.direction === 'out' ? a === state.selected : b === state.selected);
-  return list.slice(0,state.limit);
-}
-function nodeRadius(volume, maximum) {
-  const scale = Math.min(1,Math.max(.42,(map.getZoom()-9)/3));
-  return (2.5+6.5*Math.sqrt(volume/maximum))*scale;
-}
-function resizeNodes() {
-  const maximum=Math.max(1,...activity);
-  markers.forEach((m,i)=>m.setRadius(state.selected===i?10:nodeRadius(activity[i],maximum)));
-}
-function drawMap() {
-  flows.clearLayers(); nodes.clearLayers(); markers = [];
-  const shown = visibleEdges(); const maxWeight = Math.max(1,...shown.map(e => e[2]));
-  const neighbours = new Set(shown.flatMap(([a,b]) => [a,b]));
-  for (const [a,b,w] of shown) {
-    const line = L.polyline(curve(a,b),{pane:'flows',color:state.selected === null ? nodeColour(a) : '#c64735',weight:.6+3.4*Math.sqrt(w/maxWeight),opacity:state.selected === null ? .29 : .62,smoothFactor:.6});
-    const div=document.createElement('div'); div.textContent=`${stations[a].name} → ${stations[b].name}: ${fmt(w)} journeys`;
-    line.bindTooltip(div,{sticky:true}).addTo(flows);
-    if (state.selected !== null) {
-      const path = line.getElement();
-      if (path) {
-        const svg=path.ownerSVGElement;
-        if (!svg.querySelector('#direction-arrow')) {
-          const defs=document.createElementNS('http://www.w3.org/2000/svg','defs');
-          defs.innerHTML='<marker id="direction-arrow" viewBox="0 0 10 10" refX="16" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#c64735" stroke="none"/></marker>';
-          svg.prepend(defs);
-        }
-        path.setAttribute('marker-end','url(#direction-arrow)');
-      }
-    }
-  }
-  const maximum=Math.max(1,...activity);
-  // Paint busy stations last, keeping hubs visible over nearby low-volume docks.
-  const order=stations.map((_,i)=>i).sort((a,b)=>activity[a]-activity[b]);
-  for (const i of order) {
-    const s=stations[i], selected=state.selected===i;
-    const faded=state.selected!==null && !neighbours.has(i) && !selected;
-    const marker=L.circleMarker([s.lat,s.lon],{pane:'stations',radius:selected ? 10 : nodeRadius(activity[i],maximum),color:selected ? '#172c3d':'#ffffff',weight:selected ? 2.5:.85,fillColor:activity[i]===0 ? '#82929d':nodeColour(i),fillOpacity:faded ? .24: .85,opacity:faded ? .45:1});
-    marker.bindTooltip(tooltip(i),{direction:'top',offset:[0,-3]}).on('click',()=>selectStation(i)).addTo(nodes);
-    markers[i]=marker;
-  }
-  if (state.selected!==null) markers[state.selected].bringToFront();
-  $('edge-caption').textContent = state.selected===null ? `${fmt(shown.length)} strongest links · all stations shown` : `${fmt(shown.length)} ${state.direction==='out'?'outgoing':'incoming'} links · arrow shows direction`;
-  $('community-key').hidden = state.mode !== 'communities';
-  $('activity-mode').classList.toggle('selected',state.mode==='activity');
-  $('community-mode').classList.toggle('selected',state.mode==='communities');
-  $('activity-mode').setAttribute('aria-pressed',String(state.mode==='activity'));
-  $('community-mode').setAttribute('aria-pressed',String(state.mode==='communities'));
-}
-function renderSummary() {
-  const stats=meta.stats[`${state.day}-${state.time}`];
-  $('journey-total').textContent=fmt(stats.journeys);
-  $('station-total').textContent=fmt(stations.length);
-  $('connection-total').textContent=fmt(stats.edges);
-  $('period-label').textContent=`1–${meta.days} ${meta.period} · snapshot`;
-  $('coverage-number').textContent=pct(meta.coverage);
-  $('coverage-link').title='Monthly journey matching coverage. Read the methodology.';
-}
-function renderRanking() {
-  const score=state.rank==='degree' ? partners.map(x=>x.size) : activity;
-  const ranked=stations.map((_,i)=>i).sort((a,b)=>score[b]-score[a]||a-b).slice(0,5);
-  const max=Math.max(1,...score);
-  $('station-ranking').innerHTML=ranked.map((i,n)=>`<li><button class="station-row" data-station="${i}"><span class="rank-index">${String(n+1).padStart(2,'0')}</span><span class="station-row-name">${esc(shortName(stations[i]))}<small>${esc(area(stations[i]))}</small></span><span class="station-row-value">${fmt(score[i])}</span><span class="station-bar" style="--share:${score[i]/max*80}%"></span></button></li>`).join('');
-  $('ranking-description').textContent=state.rank==='degree' ? 'Distinct other stations, in either direction' : 'Arrivals + departures in this period';
-  document.querySelector('.section-head h2').textContent=state.rank==='degree' ? 'The most connected' : 'The busiest stations';
-}
-function renderStation() {
-  const chosen=state.selected!==null;
-  $('station-panel').hidden=!chosen; $('ranking-panel').hidden=chosen;
-  if (!chosen) return;
-  const i=state.selected,s=stations[i];
-  const routes=edges.filter(([a,b])=>a!==b&&(state.direction==='out'?a===i:b===i));
-  const loops=edges.find(([a,b])=>a===i&&b===i)?.[2]||0;
-  $('station-panel').innerHTML=`<button class="back-button" id="clear-station">← All stations</button><h2 class="station-title">${esc(shortName(s))}</h2><p class="station-area">${esc(area(s))} · station ${esc(s.id)}</p><div class="station-metrics"><div><strong>${fmt(departures[i])}</strong><span>departures</span></div><div><strong>${fmt(arrivals[i])}</strong><span>arrivals</span></div><div><strong>${fmt(partners[i].size)}</strong><span>other stations</span></div><div><strong>${fmt(loops)}</strong><span>same-station returns</span></div></div><div class="direction-switch" aria-label="Journey direction"><button data-direction="out" class="${state.direction==='out'?'active':''}" aria-pressed="${state.direction==='out'}">Leaving here</button><button data-direction="in" class="${state.direction==='in'?'active':''}" aria-pressed="${state.direction==='in'}">Arriving here</button></div><ol class="route-list">${routes.slice(0,6).map(([a,b,w])=>`<li><button class="route-row" data-station="${state.direction==='out'?b:a}" title="Explore this station"><span>${esc(stations[state.direction==='out'?b:a].name)}</span><strong>${fmt(w)}</strong></button></li>`).join('')}</ol><p class="station-note">${routes.length ? `Top ${Math.min(6,routes.length)} of ${fmt(routes.length)} directed connections. Numbers count recorded journeys in the selected period.` : 'No matched journeys to other stations in this period. Try every day and all hours.'}</p>`;
-  $('clear-station').onclick=()=>clearStation();
-}
-function selectStation(i,pan=true) {
-  state.selected=i; $('station-search').value=''; $('search-results').replaceChildren();
-  renderStation(); drawMap();syncURL();
-  if(pan) map.panTo([stations[i].lat,stations[i].lon],{animate:!reduced});
-  // Bring the detail into view after choosing a map node on a narrow screen.
-  if(matchMedia('(max-width:760px)').matches) $('station-panel').scrollIntoView({behavior:reduced?'instant':'smooth',block:'nearest'});
-}
-function clearStation() {state.selected=null;renderStation();drawMap();syncURL();}
-async function loadSegment() {
-  const request=++activeRequest,key=`${state.day}-${state.time}`;
-  status('Loading this part of the network…');
-  try {
-    if(!cache.has(key)) cache.set(key,await readJSON(`./data/${key}.json`));
-    if(request!==activeRequest) return;
-    edges=cache.get(key);calculate();renderSummary();renderRanking();renderStation();drawMap();syncURL();status('');
-    if(!edges.length) status('No journeys in this selection. Try different days or hours.');
-  } catch(error) {if(request===activeRequest) status('Journey data could not be loaded. Check your connection.',true);console.error(error);}
-}
-function search() {
-  const q=$('station-search').value.trim().toLocaleLowerCase();
-  if(!q) {$('search-results').replaceChildren();return;}
-  const found=stations.map((s,i)=>({s,i})).filter(({s})=>s.name.toLocaleLowerCase().includes(q)||s.id===q).slice(0,7);
-  $('search-results').innerHTML=found.length ? found.map(({s,i})=>`<button class="search-result" data-station="${i}">${esc(s.name)}</button>`).join('') : '<p class="search-empty">No station found. Try a street, area or station ID.</p>';
-}
-function showStudy(open) {
-  $('explorer').hidden=open; $('study').hidden=!open;
-  $('study-tab').classList.toggle('active',open);$('map-tab').classList.toggle('active',!open);
-  $('study-tab').setAttribute('aria-pressed',String(open));$('map-tab').setAttribute('aria-pressed',String(!open));
-  history.replaceState(null,'',`${location.pathname}${location.search}${open?'#study':''}`);
-  window.scrollTo(0,0);
-  if(open) $('study').focus({preventScroll:true}); else {map.invalidateSize();$('map-tab').focus({preventScroll:true});}
-}
-function buildStudy() {
-  const total=meta.stats['all-all'];
-  const allActivity=Array(stations.length).fill(0);
-  for(const [a,b,w] of cache.get('all-all')) {allActivity[a]+=w;allActivity[b]+=w;}
-  labels=Array.from({length:meta.communityCount},(_,c)=>{
-    const members=stations.map((s,i)=>({s,i})).filter(({s})=>s.community===c).sort((a,b)=>allActivity[b.i]-allActivity[a.i]);
-    return {name:area(members[0].s),members:members.length,activity:members.reduce((n,{i})=>n+allActivity[i],0)};
-  });
-  $('community-key').innerHTML=labels.map((c,i)=>`<span class="community-item"><i style="background:${palette[i%palette.length]}"></i>${esc(c.name)}</span>`).join('');
-  const top=total.topStations.slice(0,5);
-  const hourMax=Math.max(...meta.hoursPerDay.weekday,...meta.hoursPerDay.weekend);
-  const peak=meta.hoursPerDay.weekday.indexOf(Math.max(...meta.hoursPerDay.weekday));
-  const peakEnd=meta.hoursPerDay.weekend.indexOf(Math.max(...meta.hoursPerDay.weekend));
-  const r=meta.resilience;
-  $('study').innerHTML=`<button class="back-button" id="return-map">← Back to the map</button><div class="study-top"><div><h1>What holds London’s<br>cycle network together?</h1><p class="study-lead">Every hire joins two places. Together, ${fmt(meta.mappedJourneys)} mapped journeys reveal the hubs, local neighbourhoods and daily rhythms of a shared transport network.</p></div><div class="study-stamp"><strong>${esc(meta.period)}</strong><span>${meta.days} days · ${fmt(stations.length)} stations<br>Independent complex networks project</span></div></div>
-  <section class="study-section"><div><h2>Busy hubs, but no single dominant station.</h2><p class="finding">The ten busiest stations account for <strong>${pct(total.topTenShare)}</strong> of all recorded arrivals and departures.</p><p>A station’s <strong>strength</strong> counts its arrivals plus departures. Its <strong>degree</strong> counts the distinct other stations it connects to. A busy station and a well-connected station tell different stories: one handles many hires; the other reaches many places.</p><p>The strongest hub this month is <strong>${esc(stations[top[0]].name)}</strong>, with ${fmt(allActivity[top[0]])} journey endpoints. A same-station return contributes one departure and one arrival.</p></div><figure><table><caption class="sr-only">Five busiest stations by recorded arrivals and departures</caption><thead><tr><th>Station</th><th>Activity</th></tr></thead><tbody>${top.map(i=>`<tr><td>${esc(stations[i].name)}</td><td>${fmt(allActivity[i])}</td></tr>`).join('')}</tbody></table><figcaption>All matched journeys, ${esc(meta.period)}. Counting endpoints means a journey contributes to both its origin and destination.</figcaption></figure></section>
-  <section class="study-section"><div><h2>The city has local networks within it.</h2><p class="finding">The network separates into <strong>${meta.communityCount} groups</strong> of stations with dense internal journey flows.</p><p>Louvain community detection groups stations by observed travel patterns, without using their coordinates. We add the two directional weights for each pair and omit same-station returns. Modularity is <strong>${meta.modularity.toFixed(3)}</strong>, a measure of within-group structure relative to a degree-based baseline.</p><p>Switch to <button class="inline-map-link" id="study-communities">Communities on the map ↗</button> to see the groups. Names below describe the area of each group’s busiest station; they are not administrative boundaries. Colours use the full-month partition even when you filter the map.</p></div><figure><table class="community-table"><caption class="sr-only">Detected communities</caption><thead><tr><th>Group centred on</th><th>Stations</th><th>Activity share</th></tr></thead><tbody>${labels.map((g,i)=>`<tr><td><span class="swatch" style="background:${palette[i%palette.length]}"></span>${esc(g.name)}</td><td>${g.members}</td><td>${pct(g.activity/(2*total.journeys))}</td></tr>`).join('')}</tbody></table><figcaption>Weighted Louvain, resolution 1, seed 42. Descriptive groups, not proof of a unique or permanent partition.</figcaption></figure></section>
-  <section class="study-section"><div><h2>A different rhythm at the weekend.</h2><p class="finding">The busiest weekday start hour is <strong>${String(peak).padStart(2,'0')}:00–${String(peak+1).padStart(2,'0')}:00</strong>. At the weekend, the peak is <strong>${String(peakEnd).padStart(2,'0')}:00–${String(peakEnd+1).padStart(2,'0')}:00</strong>.</p><p>These are <strong>journeys per hour per day</strong>, so the comparison adjusts for the different number of weekdays and weekend days. The profile is consistent with different travel routines, but trip purpose is not recorded.</p><p>Use the map’s day and start-time filters to compare the actual connections. Morning covers 07:00–09:59; evening covers 16:00–18:59, in local London time. Bank holidays count as weekdays.</p></div><figure><div class="hour-chart" role="img" aria-label="Average hourly journeys per day. Weekdays peak at ${peak}:00; weekends peak at ${peakEnd}:00.">${Array.from({length:24},(_,h)=>`<div class="hour-pair" title="${h}:00 — weekday ${fmt(meta.hoursPerDay.weekday[h])}, weekend ${fmt(meta.hoursPerDay.weekend[h])}"><i style="--h:${meta.hoursPerDay.weekday[h]/hourMax*100}%"></i><i style="--h:${meta.hoursPerDay.weekend[h]/hourMax*100}%"></i>${h%6===0?`<span>${String(h).padStart(2,'0')}</span>`:''}</div>`).join('')}</div><div class="chart-key"><span><i></i>Weekday</span><span><i></i>Weekend</span></div><figcaption>Mean matched departures per day, by local start hour. Full hourly values are included in the downloadable analysis JSON.</figcaption></figure></section>
-  <section class="study-section"><div><h2>What if the busiest stations disappeared?</h2><p class="finding">Removing the busiest 10% of active stations leaves <strong>${pct(r.targetedRetained)}</strong> of observed journeys with both endpoints intact. Removing the same number at random retains <strong>${pct(r.randomRetained)}</strong>, on average.</p><p>This is a simple <strong>static stress test</strong>: remove ${r.removed} stations, then count trips between the remaining stations. The targeted set is ranked once by full-month activity. The random comparison averages 100 reproducible samples.</p><p>It measures the concentration of observed demand. It does not predict lost travel: people may use another dock, change route or choose another mode. No rerouting is modelled.</p></div><figure><div class="resilience-bars"><div><div class="resilience-label"><span>Busiest stations removed</span><strong>${pct(r.targetedRetained)}</strong></div><div class="resilience-track"><i style="--share:${pct(r.targetedRetained)}"></i></div></div><div><div class="resilience-label"><span>Random stations removed</span><strong>${pct(r.randomRetained)}</strong></div><div class="resilience-track random"><i style="--share:${pct(r.randomRetained)}"></i></div></div></div><figcaption>Share of recorded journeys retained. Random sample range: ${pct(r.randomMin)}–${pct(r.randomMax)}. This range describes the 100 samples, not a confidence interval.</figcaption></figure></section>
-  <section class="study-section methods" id="methods"><div><h2>How this atlas was made.</h2><p>Nodes are docking stations returned by the <a href="https://api.tfl.gov.uk/BikePoint">TfL BikePoint API</a>. A directed edge A → B exists when at least one recorded hire starts at A and ends at B. Its weight is the number of hires. These are journeys, not unique people, and the curved lines are origin–destination links, not GPS routes.</p><h3>Coverage and cleaning</h3><p>Two <a href="https://cycling.data.tfl.gov.uk/">official TfL extracts</a> cover ${meta.start} to ${meta.end}. After normalization, identifier deduplication and positive-duration/time checks, ${fmt(meta.validJourneys)} journeys remain. ${fmt(meta.mappedJourneys)} (${pct(meta.coverage,2)}) have both endpoints matched to a current station; ${fmt(meta.unmappedJourneys)} are excluded from the map and graph.</p><p>All ${fmt(stations.length)} available current stations are drawn, including those with no matched journeys in the selected period (grey). Historical station names must match an unambiguous normalized current name; matching IDs alone never override a name mismatch. Current coordinates can differ from historic locations. Station snapshot: <strong>${esc(meta.stationSnapshot)}</strong> (UTC).</p><h3>What the map leaves out</h3><p>The default shows only the 80 strongest non-return links to keep the map readable. The slider changes the displayed links; it never changes counts or network measures. Selecting a station shows its strongest incoming or outgoing links. Circle radius follows 2.5 + 6.5 × √(activity / maximum activity); its base radius keeps every station visible. Radii shrink at wider zoom levels to reduce overlap. Same-station returns stay in activity totals but are excluded from links, degree, density, reciprocity and communities.</p><h3>The graph, in numbers</h3><p>${fmt(total.active)} stations have a connection to another station. There are ${fmt(total.edges)} distinct directed links, a directed density of ${pct(total.density,2)}, and ${pct(total.reciprocity)} of directed links have a reverse link (regardless of its weight). The largest weakly connected component contains ${fmt(total.largestComponent)} stations.</p><h3>Limits of the study</h3><p>One month is a snapshot, not a seasonal trend. Weather, dock capacity, station closures, electric bikes and operator redistribution can influence the pattern. The study is descriptive: it cannot establish why someone travelled or whether a station caused demand. Exact communities depend on algorithm and resolution.</p></div><div><h2>Take the data with you.</h2><p>Compact aggregates, source checksums, analysis settings and software versions. Raw trip-level records stay with TfL.</p><div class="download-links"><a href="./data/stations.csv" download>Station coordinates + groups <span>CSV ↓</span></a><a href="./data/flows.csv" download>Full monthly directed network <span>CSV ↓</span></a><a href="./data/meta.json" download>Analysis, hours + provenance <span>JSON ↓</span></a><a href="./data/unmatched-stations.csv" download>Unmatched historical stations <span>CSV ↓</span></a><a href="https://github.com/aleetreny/santander-cycles-network">Code + reproduction instructions <span>↗</span></a></div><p>Flow CSV endpoints reference zero-based row indices in the station CSV. The website runs as a static GitHub Pages site. Map tiles need an internet connection. Journey data are a pinned snapshot, not live availability.</p><p><a href="https://tfl.gov.uk/corporate/terms-and-conditions/transport-data-service">TfL data terms</a> · <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a></p></div></section><p class="credit">Powered by TfL Open Data. Contains OS data © Crown copyright and database rights 2016; Geomni UK Map data © and database rights 2019. Independent educational project; not an official TfL or Santander product. Code: MIT. Data rights remain with their owners.</p>`;
-  $('return-map').onclick=()=>showStudy(false);
-  $('study-communities').onclick=()=>{setMode('communities');showStudy(false);};
-}
-function setMode(mode) {state.mode=mode;drawMap();syncURL();}
-function bindControls() {
-  $('day-filter').value=state.day;$('time-filter').value=state.time;
-  $('day-filter').onchange=e=>{state.day=e.target.value;loadSegment();};
-  $('time-filter').onchange=e=>{state.time=e.target.value;loadSegment();};
-  $('activity-mode').onclick=()=>setMode('activity');$('community-mode').onclick=()=>setMode('communities');
-  $('edge-limit').oninput=e=>{state.limit=Number(e.target.value);$('edge-output').value=state.limit;drawMap();};
-  $('rank-by').onchange=e=>{state.rank=e.target.value;renderRanking();};
-  $('station-search').oninput=search;
-  $('station-search').onkeydown=e=>{if(e.key==='Enter') {const first=$('search-results').querySelector('[data-station]');if(first){e.preventDefault();selectStation(Number(first.dataset.station));$('clear-station').focus();}}};
-  document.addEventListener('keydown',e=>{if(e.key==='/' && !['INPUT','SELECT','TEXTAREA'].includes(document.activeElement.tagName)){e.preventDefault();$('station-search').focus();}if(e.key==='Escape'){$('search-results').replaceChildren();$('station-search').value='';}});
-  document.addEventListener('click',e=>{
-    const target=e.target.closest('[data-station]');if(target)selectStation(Number(target.dataset.station));
-    const direction=e.target.closest('[data-direction]');if(direction){state.direction=direction.dataset.direction;renderStation();drawMap();document.querySelector(`[data-direction="${state.direction}"]`)?.focus();}
-    if(!e.target.closest('.search-wrap'))$('search-results').replaceChildren();
-  });
-  $('legend-toggle').onclick=()=>{const open=$('legend-body').hidden;$('legend-body').hidden=!open;$('legend-toggle').textContent=open?'−':'+';$('legend-toggle').setAttribute('aria-expanded',String(open));$('legend-toggle').setAttribute('aria-label',`${open?'Collapse':'Expand'} map legend`);};
-  $('study-tab').onclick=()=>showStudy(true);$('study-link').onclick=()=>showStudy(true);$('coverage-link').onclick=()=>{showStudy(true);$('methods').scrollIntoView();};$('map-tab').onclick=()=>showStudy(false);
-}
-async function start() {
-  try {
-    [meta,stations]=await Promise.all([readJSON('./data/meta.json'),readJSON('./data/stations.json')]);
-    if(typeof L==='undefined')throw new Error('Map library failed to load');
-    cache.set('all-all',await readJSON('./data/all-all.json'));
-    initMap();bindControls();buildStudy();await loadSegment();
-    const requested=stations.findIndex(s=>s.id===initial.get('station'));
-    if(requested>=0)selectStation(requested);
-    if(location.hash==='#study')showStudy(true);
-  } catch(error) {status('The atlas could not be loaded. Check your connection and try again.',true);console.error(error);}
-}
+function fitNetwork(){map.fitBounds(stations.map(s=>[s.lat,s.lon]),{padding:[24,24],animate:false});}
+function curve(a,b){const p=stations[a],q=stations[b],dx=q.lon-p.lon,dy=q.lat-p.lat,cx=(p.lon+q.lon)/2-dy*.16,cy=(p.lat+q.lat)/2+dx*.063;return Array.from({length:21},(_,i)=>{const t=i/20;return[(1-t)**2*p.lat+2*(1-t)*t*cy+t*t*q.lat,(1-t)**2*p.lon+2*(1-t)*t*cx+t*t*q.lon];});}
+function updateNodes(){const neighbours=new Map();displayed().forEach(([a,b],rank)=>neighbours.set(state.direction==='out'?b:a,rank));const maximum=Math.max(1,...view.departures.map((n,i)=>n+view.arrivals[i]));const scale=Math.min(1,Math.max(.45,(map.getZoom()-9)/3));markers.forEach((m,i)=>{const chosen=state.selected===i,rank=neighbours.get(i),faded=state.selected!==null&&!chosen;const value=view.departures[i]+view.arrivals[i];m.setRadius(chosen?10:(2.2+6*Math.sqrt(value/maximum))*scale);m.setStyle({color:chosen?'#172c3d':'#fff',weight:chosen?2:.7,fillColor:chosen?'#172c3d':rank!==undefined&&state.selected!==null?colours[rank%5]:value?colour(i):'#899aa5',fillOpacity:faded?.17:.8,opacity:faded?.35:1});});}
+function arrow(path,colour,rank){const svg=path.ownerSVGElement,id=`route-arrow-${rank}`;let defs=svg.querySelector('defs');if(!defs){defs=document.createElementNS('http://www.w3.org/2000/svg','defs');svg.prepend(defs);}const marker=document.createElementNS('http://www.w3.org/2000/svg','marker');marker.setAttribute('id',id);marker.setAttribute('viewBox','0 0 10 10');marker.setAttribute('refX','18');marker.setAttribute('refY','5');marker.setAttribute('markerWidth','4');marker.setAttribute('markerHeight','4');marker.setAttribute('orient','auto');marker.innerHTML=`<path d="M0 0 10 5 0 10Z" fill="${colour}" stroke="none"/>`;defs.append(marker);path.setAttribute('marker-end',`url(#${id})`);}
+function drawMap(){if(!view||loadedKey!==viewKey())return;document.querySelector('.map-area').classList.toggle('has-route',state.selected!==null);map.invalidateSize({pan:false});flowLayer.clearLayers();pinLayer.clearLayers();map.getPane('flows').querySelectorAll('defs').forEach(d=>d.remove());flowPaths=[];const shown=displayed(),selected=state.selected!==null,largest=Math.max(1,...shown.map(e=>e[2]));if(selected&&!shown.some(e=>(state.direction==='out'?e[1]:e[0])===state.focused))state.focused=shown.length?(state.direction==='out'?shown[0][1]:shown[0][0]):null;
+  for(const [rank,[a,b,w,median]] of shown.entries()){const other=state.direction==='out'?b:a,c=selected?colours[rank%5]:colour(a),focused=selected&&other===state.focused;const path=L.polyline(curve(a,b),{renderer:flowRenderer,color:c,weight:selected?(focused?6:2+3*Math.sqrt(w/largest)):.7+3*Math.sqrt(w/largest),opacity:selected?(focused?.95:.32):.33,smoothFactor:.6,className:state.animate?'flow-moving':''}).addTo(flowLayer);const tip=document.createElement('div');tip.innerHTML=`<strong>${esc(shortName(stations[a]))} → ${esc(shortName(stations[b]))}</strong><span>${fmt(w)} recorded ${w===1?'trip':'trips'} · median ${median} min</span>`;path.bindTooltip(tip,{sticky:true});if(selected){path.on('click',()=>focusRoute(other));const el=path.getElement();if(el)arrow(el,c,rank);if(rank<10){const label=focused?`<span class="pin-name">${esc(shortName(stations[other]))}</span>`:'';const pin=L.marker([stations[other].lat,stations[other].lon],{icon:L.divIcon({className:'route-pin',html:`<span class="pin-number ${focused?'is-focused':''}" style="--route:${c}">${rank+1}</span>${label}`,iconSize:[30,30],iconAnchor:[15,15]}),title:`Connection ${rank+1}: ${stations[other].name}, ${fmt(w)} trips`,keyboard:true,zIndexOffset:focused?1000:500}).on('click',()=>focusRoute(other)).addTo(pinLayer);pin.bindTooltip(`${fmt(w)} trips · ${pct(w/Math.max(1,denominator()))} of ${state.direction==='out'?'departures':'arrivals'}`);}}flowPaths.push({path,other});}
+  if(selected){L.marker([stations[state.selected].lat,stations[state.selected].lon],{icon:L.divIcon({className:'origin-pin',html:`<span>${state.direction==='out'?'Start here':'End here'}</span>`,iconSize:[76,24],iconAnchor:[38,37]}),interactive:false,zIndexOffset:1200}).addTo(pinLayer);}
+  document.querySelector('.map-area').classList.toggle('has-route',selected);$('map-key').hidden=selected;updateNodes();renderSpotlight();$('edge-caption').textContent=selected?`${shown.length} ${state.direction==='out'?'destinations':'origins'} · top ${Math.min(10,shown.length)} numbered on the map`:`${shown.length} busiest connections · all ${stations.length} docks shown`;$('edge-output').value=state.limit;$('edge-limit').value=state.limit;$('community-key').hidden=state.mode!=='communities';$('community-key').innerHTML=studyData.groups.map((g,i)=>`<span class="community-item"><i style="background:${groupColours[i]}"></i>${esc(g.name)}</span>`).join('');for(const mode of ['activity','communities']){const el=$(mode==='activity'?'activity-mode':'community-mode');el.classList.toggle('selected',state.mode===mode);el.setAttribute('aria-pressed',String(state.mode===mode));}}
+function renderSummary(){if(loadedKey!==viewKey())return;$('journey-total').textContent=fmt(view.journeys);$('station-total').textContent=fmt(stations.length);$('connection-total').textContent=fmt(view.connections);$('period-label').textContent=`${meta.period} · ${view.days} ${dayWord()}${view.days===1?'':'s'}`;$('coverage-number').textContent=pct(meta.coverage);$('coverage-link').title='Coverage for the full month. Filters use matched journeys only.';document.querySelector('.sidebar').classList.toggle('has-selection',state.selected!==null);$('filter-count').textContent=[state.bike!=='all',state.distance!=='all',state.relation!=='all',state.minimum>1,state.unit!=='total'].filter(Boolean).length||'';}
+function score(){if(state.rank==='degree')return view.degree;if(state.rank==='arrivals')return view.arrivals;if(state.rank==='departures')return view.departures;if(state.rank==='balance')return view.arrivals.map((v,i)=>v-view.departures[i]);return view.arrivals.map((v,i)=>v+view.departures[i]);}
+function renderRanking(){const values=score(),ranked=stations.map((_,i)=>i).sort((a,b)=>values[b]-values[a]||a-b).slice(0,5),max=Math.max(1,...values);const unit=state.rank==='degree'?'other docks':state.rank==='balance'?'net arrivals':state.rank==='activity'?'starts + ends':'trips';$('station-ranking').innerHTML=ranked.map((i,j)=>`<li><button class="station-row" data-station="${i}"><span class="rank-index">${j+1}</span><span class="station-row-name">${esc(shortName(stations[i]))}<small>${esc(area(stations[i]))}</small></span><span class="station-row-value">${state.unit==='daily'&&state.rank!=='degree'?daily(values[i]):fmt(values[i])}<small>${unit}${state.unit==='daily'&&state.rank!=='degree'?'/day':''}</small></span><span class="station-bar" style="--share:${values[i]/max*80}%"></span></button></li>`).join('');$('ranking-description').textContent=state.rank==='degree'?'How many other stations have a recorded link':state.rank==='balance'?'Trips ending here minus trips starting here':`${periodText()} · ${state.rank==='activity'?'each arrival and departure counts once':'recorded hires'}`;document.querySelector('.section-head h2').textContent=state.rank==='degree'?'The widest reach':state.rank==='balance'?'More arrivals than departures':'The busiest docks';}
+function renderStation(){const selected=state.selected!==null;$('station-panel').hidden=!selected;$('ranking-panel').hidden=selected;if(!selected)return;const i=state.selected,s=stations[i],routes=allRoutes(),shown=routes.slice(0,Math.min(10,state.limit)),total=denominator();const loops=detail.segments[viewKey()].out.find(([other])=>other===i)?.[1]||0;const top=routes[0],filtered=state.distance!=='all'||state.relation!=='all'||state.minimum>1;
+  $('station-panel').innerHTML=`<button class="back-button" id="clear-station">← Choose another dock</button><h2 class="station-title">${esc(shortName(s))}</h2><p class="station-area">${esc(area(s))} · ${periodText()}</p><div class="station-metrics"><div><strong>${fmt(view.departures[i])}</strong><span>trips started here</span></div><div><strong>${fmt(view.arrivals[i])}</strong><span>trips ended here</span></div></div><div class="direction-switch" aria-label="Explore journey direction"><button data-direction="out" class="${state.direction==='out'?'active':''}" aria-pressed="${state.direction==='out'}">Where bikes go</button><button data-direction="in" class="${state.direction==='in'?'active':''}" aria-pressed="${state.direction==='in'}">Where bikes come from</button></div><p class="route-explainer">${state.direction==='out'?'Trips from this dock to each destination.':'Trips from each origin to this dock.'} <strong>${fmt(total)} ${state.direction==='out'?'departures':'arrivals'}</strong> in this selection.</p>${top?`<p class="typical-route">${filtered?'Top match':'Favourite '+(state.direction==='out'?'destination':'origin')}: <strong>${esc(shortName(stations[top[0]]))}</strong><span>${fmt(top[1])} trips · ${pct(top[1]/Math.max(1,total))} of all ${state.direction==='out'?'departures':'arrivals'}</span></p>`:''}<ol class="route-list">${shown.map(([other,w,m],rank)=>`<li><button class="route-row ${state.focused===other?'route-active':''}" data-route="${other}" aria-pressed="${state.focused===other}" style="--route:${colours[rank%5]};--share:${w/Math.max(1,top[1])*100}%"><span class="route-rank">${rank+1}</span><span class="route-name">${esc(shortName(stations[other]))}<small>${esc(area(stations[other]))}</small><span class="route-meter"></span></span><span class="route-value"><strong>${routeUnit(w)}</strong><small>${pct(w/Math.max(1,total))} of ${state.direction==='out'?'departures':'arrivals'}</small></span></button></li>`).join('')}</ol>${routes.length===0?'<p class="station-note">No connections match these filters. <button id="reset-route-filters">Clear link filters</button> or choose a different time.</p>':`<p class="station-note">Choose a row to spotlight its line. ${shown.length} shown in the list; ${fmt(routes.length)} match the link filters. ${fmt(loops)} same-dock returns are included in the trip totals, but have no line.</p>`}<button class="surprise-button" id="surprise-route">Pick a connection for me <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m3 5 3 3 4-5m-7 12 3-3 4 5M6 8v4m4-9h6v5m-6 9h6v-5"/></svg></button>`;
+  $('clear-station').onclick=clearStation;if($('reset-route-filters'))$('reset-route-filters').onclick=()=>resetLinkFilters();$('surprise-route').onclick=()=>{const choices=allRoutes().slice(0,Math.min(state.limit,10));if(choices.length)focusRoute(choices[Math.floor(Math.random()*choices.length)][0],true);};}
+function renderSpotlight(){const chosen=state.selected!==null,route=chosen?allRoutes().find(([i])=>i===state.focused):null;$('route-spotlight').hidden=!route;if(!route)return;const [other,w,m]=route,rank=allRoutes().slice(0,state.limit).findIndex(([i])=>i===other),a=state.direction==='out'?state.selected:other,b=state.direction==='out'?other:state.selected,c=colours[rank%5];$('route-spotlight').innerHTML=`<div class="spotlight-heading"><span class="route-rank" style="--route:${c}">${rank+1}</span><span>${state.direction==='out'?'Destination':'Origin'} in focus</span><button id="fit-route">Fit this connection ↗</button></div><p><strong>${esc(shortName(stations[a]))}</strong><span class="journey-arrow" aria-label="to">→</span><strong>${esc(shortName(stations[b]))}</strong></p><div class="route-facts"><span><strong>${fmt(w)} trips</strong>${pct(w/Math.max(1,denominator()))} of ${state.direction==='out'?'all departures':'all arrivals'}</span><span><strong>${daily(w)} trips / ${dayWord()}</strong>average in this selection</span><span><strong>${m<1?'Under 1':fmt(m)} min</strong>median recorded hire</span></div><p class="spotlight-note">${w<5?'Very few trips: treat this as an observation, not a stable habit.':`${periodText()} · ${meta.period}`} · ${distance(a,b).toFixed(1)} km between docks; actual cycling route may be longer.</p><button id="explore-endpoint" class="explore-endpoint">Explore ${esc(shortName(stations[other]))} instead ↗</button>`;$('fit-route').onclick=fitRoute;$('explore-endpoint').onclick=()=>selectStation(other);}
+function focusRoute(i,fit=false){state.focused=i;drawMap();renderStation();syncURL();if(fit)fitRoute();}
+function fitSelection(){if(state.selected===null)return;const coords=[[stations[state.selected].lat,stations[state.selected].lon],...displayed().slice(0,10).map(([a,b])=>{const i=state.direction==='out'?b:a;return[stations[i].lat,stations[i].lon];})];map.fitBounds(coords,{paddingTopLeft:[40,35],paddingBottomRight:[45,matchMedia('(max-width:760px)').matches?85:Math.min(300,$('route-spotlight').offsetHeight+90)],maxZoom:14,animate:false});}
+function fitRoute(){if(state.selected===null||state.focused===null)return;map.fitBounds([[stations[state.selected].lat,stations[state.selected].lon],[stations[state.focused].lat,stations[state.focused].lon]],{paddingTopLeft:[55,50],paddingBottomRight:[55,matchMedia('(max-width:760px)').matches?85:Math.min(300,$('route-spotlight').offsetHeight+90)],maxZoom:15,animate:false});}
+async function refresh(){const serial=++request,key=viewKey(),selected=state.selected;status('Updating recorded trips…');$('explorer').setAttribute('aria-busy','true');try{const [next,station]=await Promise.all([json(`./data/views/${key}.json`),selected!==null?json(`./data/detail/${stations[selected].id}.json`):Promise.resolve(null)]);if(serial!==request)return;view=next;detail=station;loadedKey=key;const routes=allRoutes();if(state.selected!==null&&!routes.some(([i])=>i===state.focused))state.focused=routes[0]?.[0]??null;renderSummary();renderRanking();renderStation();drawMap();syncURL();status('');$('explorer').setAttribute('aria-busy','false');}catch(e){if(serial===request){status('These trip records could not be loaded. Check your connection.',true);$('explorer').setAttribute('aria-busy','false');}console.error(e);}}
+async function selectStation(i,pan=true){const first=state.selected===null;state.selected=i;state.focused=null;state.animate=false;updatePlayButton();if(first)state.limit=5;$('station-search').value='';$('search-results').replaceChildren();await refresh();if(pan)fitSelection();return i;}
+function clearStation(){state.selected=null;state.focused=null;state.limit=80;state.animate=false;updatePlayButton();detail=null;renderSummary();renderRanking();renderStation();drawMap();syncURL();fitNetwork();}
+function search(){const q=$('station-search').value.trim().toLowerCase();if(!q){$('search-results').replaceChildren();return;}const matches=stations.map((s,i)=>({s,i})).filter(({s})=>s.name.toLowerCase().includes(q)||s.id===q).slice(0,7);$('search-results').innerHTML=matches.length?matches.map(({s,i})=>`<button class="search-result" data-station="${i}">${esc(s.name)}</button>`).join(''):'<p class="search-empty">No station found. Try a street, area or station ID.</p>';}
+async function showStudy(open){$('explorer').hidden=open;$('study').hidden=!open;for(const [id,on] of [['study-tab',open],['map-tab',!open]]){$(id).classList.toggle('active',on);$(id).setAttribute('aria-pressed',String(on));}history.replaceState(null,'',`${location.pathname}${location.search}${open?'#study':''}`);window.scrollTo(0,0);if(open){if(!studyBuilt){$('study').textContent='Opening the study…';try{studyPromise??=import('./study.js?v=2');const module=await studyPromise;module.renderStudy({meta,stations,studyData,fmt,pct,esc,showStudy,setMode,explore});studyBuilt=true;}catch(e){$('study').innerHTML='<p>The study could not be opened. <button id="retry-study">Try again</button></p>';$('retry-study').onclick=()=>{studyPromise=null;showStudy(true);};console.error(e);}}$('study').focus({preventScroll:true});}else{map.invalidateSize();$('map-tab').focus({preventScroll:true});}}
+async function explore(options){Object.assign(state,{day:'all',time:'all',bike:'all',distance:'all',relation:'all',minimum:1,unit:'total',direction:'out',mode:'activity',selected:null,animate:false},options);updatePlayButton();state.focused=null;state.limit=state.selected!==null?5:80;syncControls();await refresh();await showStudy(false);if(state.selected!==null)fitSelection();}
+function setMode(mode){state.mode=mode;drawMap();syncURL();}
+function updatePlayButton(){$('flow-play').textContent=state.animate?'Pause flow':'Play flow';$('flow-play').setAttribute('aria-pressed',String(state.animate));$('flow-play').disabled=reduced;$('flow-play').title=reduced?'Animation follows your reduced-motion preference':'Moving dashes show direction, not individual cyclists';}
+function syncControls(){for(const [id,value] of [['day-filter',state.day],['time-filter',state.time],['bike-filter',state.bike],['distance-filter',state.distance],['relation-filter',state.relation],['minimum-filter',state.minimum],['unit-filter',state.unit]])$(id).value=String(value);}
+function resetLinkFilters(){state.distance='all';state.relation='all';state.minimum=1;syncControls();renderSummary();drawMap();renderStation();syncURL();}
+function bindControls(){syncControls();for(const [id,key] of [['day-filter','day'],['time-filter','time'],['bike-filter','bike']])$(id).onchange=e=>{state[key]=e.target.value;state.focused=null;refresh();};for(const [id,key] of [['distance-filter','distance'],['relation-filter','relation'],['minimum-filter','minimum'],['unit-filter','unit']])$(id).onchange=e=>{state[key]=key==='minimum'?Number(e.target.value):e.target.value;drawMap();renderSummary();renderRanking();renderStation();syncURL();};$('filter-toggle').onclick=()=>{const open=$('extra-filters').hidden;$('extra-filters').hidden=!open;$('filter-toggle').setAttribute('aria-expanded',String(open));map.invalidateSize();};$('clear-filters').onclick=()=>{Object.assign(state,{day:'all',time:'all',bike:'all',distance:'all',relation:'all',minimum:1,unit:'total'});syncControls();refresh();};$('activity-mode').onclick=()=>setMode('activity');$('community-mode').onclick=()=>setMode('communities');let frame;$('edge-limit').oninput=e=>{state.limit=Number(e.target.value);cancelAnimationFrame(frame);frame=requestAnimationFrame(()=>{drawMap();renderStation();});};$('flow-play').onclick=()=>{state.animate=!state.animate;updatePlayButton();drawMap();};updatePlayButton();$('rank-by').onchange=e=>{state.rank=e.target.value;renderRanking();};$('station-search').oninput=search;$('station-search').onkeydown=async e=>{if(e.key==='Enter'){const first=$('search-results [data-station]');if(first){e.preventDefault();await selectStation(Number(first.dataset.station));$('clear-station')?.focus({preventScroll:true});}}};document.addEventListener('keydown',e=>{if(e.key==='/'&&!['INPUT','SELECT','TEXTAREA'].includes(document.activeElement.tagName)){e.preventDefault();$('station-search').focus();}if(e.key==='Escape'){$('search-results').replaceChildren();$('station-search').value='';}});document.addEventListener('click',e=>{const station=e.target.closest('[data-station]');if(station)selectStation(Number(station.dataset.station));const route=e.target.closest('[data-route]');if(route)focusRoute(Number(route.dataset.route));const dir=e.target.closest('[data-direction]');if(dir){state.direction=dir.dataset.direction;state.focused=null;drawMap();renderStation();syncURL();document.querySelector(`[data-direction="${state.direction}"]`)?.focus({preventScroll:true});}if(!e.target.closest('.search-wrap'))$('search-results').replaceChildren();});$('legend-toggle').onclick=()=>{const open=$('legend-body').hidden;$('legend-body').hidden=!open;$('legend-toggle').textContent=open?'−':'+';$('legend-toggle').setAttribute('aria-expanded',String(open));};$('study-tab').onclick=()=>showStudy(true);$('study-link').onclick=()=>showStudy(true);$('coverage-link').onclick=async()=>{await showStudy(true);$('methods')?.scrollIntoView();};$('map-tab').onclick=()=>showStudy(false);}
+async function start(){try{const bootstrap=await json('./data/index.json');({meta,stations}=bootstrap);studyData=bootstrap.study;const requested=stations.findIndex(s=>s.id===params.get('station'));state.selected=requested>=0?requested:null;state.limit=state.selected!==null?5:80;const focus=stations.findIndex(s=>s.id===params.get('route'));state.focused=focus>=0?focus:null;if(typeof L==='undefined')throw Error('Map library failed');initMap();bindControls();ready=true;await refresh();if(state.selected!==null)fitSelection();if(location.hash==='#study')await showStudy(true);performance.mark('atlas-ready');}catch(e){status('The atlas could not be loaded. Check your connection.',true);console.error(e);}}
 start();

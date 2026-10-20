@@ -13,3 +13,5 @@ Layout: masthead across top, 322px map index on left, large unobscured map on ri
 Signature: selecting a station removes unrelated lines and reveals its strongest directional spokes. Quiet edges and readable proportional nodes, continuous geographic context. Clear legend and explicit dataset dates.
 
 Quality floor: focus-visible, reduced motion, no hover-only access, mobile scroll, real loading/error/empty states, no fabricated live status, explicit routes-as-OD caveat.
+
+V2 refinement: preserve palette and type, add pale sky and butter-yellow accents to the existing cycling atlas. A selected station becomes a small route game: five numbered destination markers match five coloured rows, one focused connection at a time, exact trips/share/day units. Clicking a route keeps the origin selected. Extra filters sit in a disclosure, with active-filter feedback and reset. Play/pause controls directional flow animation; reduced motion stays still. Station dots use a persistent canvas; only the handful of chosen links use SVG.

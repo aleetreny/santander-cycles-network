@@ -29,3 +29,13 @@ Lead with the geographic network and explain one station's spokes. Define degree
 ## Extensions, deliberately outside the first release
 
 Compare a second complete month to measure partition stability and seasonal shifts. Test modularity against degree/strength-preserving null networks and repeat Louvain over seeds/resolutions. Compare strength inequality using a Lorenz curve and Gini coefficient. Only add betweenness after defining how flow weight becomes a distance or cost. Explore dock capacity and electric-bike composition as descriptive covariates; do not claim causal effects from this observational atlas.
+
+## Interactive second release
+
+The explorer now contains 45 exact slices: 3 day types × 5 start-time windows × 3 bike categories. The non-overlapping windows are 07–10, 10–16, 16–19 and 19–07; “all hours” includes all four. CLASSIC and PBSC_EBIKE exactly partition matched journeys in this snapshot. Daily averages divide by all calendar dates of the selected day type (31 days, 21 weekdays or 10 weekend days), not only dates on which a particular route was used.
+
+A station route row reports observed trip count, share of every matched departure/arrival at that station and median recorded hire duration. Same-dock returns remain in that denominator. Display filters for distance (great-circle dock distance), community relationship and minimum trip count do not renormalise the share. No route length, speed, distinct rider count or future destination probability is inferred.
+
+The worked example uses the user’s station: Margery Street → Guilford Street had 27 recorded weekday trips, out of 525 departures, across 21 weekdays: 5.1% and about 1.3 trips per weekday. It is the most frequent destination even though the majority of trips went elsewhere. The study adds a row-normalised community mixing matrix, a descriptive classic/electric comparison, a plain glossary and map presets for actual exploration.
+
+Implementation: `cycles.atlas` reads the same prepared, deduplicated and station-matched inputs and refuses changed monthly coverage. It publishes exact overview totals and top-200 link pools for each distance/community class, plus one lazy detail file per station. The browser uses persistent Canvas nodes and SVG only for the small visible set of connections. Full aggregates remain available for research.

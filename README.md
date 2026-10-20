@@ -11,7 +11,9 @@ Model docking stations as nodes and completed cycle-hire journeys as **directed,
 A static, responsive network explorer with **801 available stations**, **857,151 mapped journeys** and **212,532 directed connections**, based on **1–31 May 2026**. May is the newest complete dated month found in TfL's public archive at build time (20 October 2026). This is a pinned study, not live traffic. Both endpoints are matched for **99.32%** of valid journeys.
 
 - Click a station or search a street/area to see its busiest outgoing and incoming connections.
-- Compare weekdays and weekends, morning (07–10), evening (16–19), or all hours.
+- Read every connection as a count of recorded trips, its share of departures/arrivals, average trips per observed day and median hire time. Numbered coloured pins match the ranked route list; clicking a connection keeps the origin selected.
+- Compare weekdays/weekends, morning (07–10), daytime (10–16), evening (16–19), night (19–07) or all hours, for all bikes, classic bikes or electric bikes.
+- Narrow displayed links by straight-line dock distance, within/across-community connections and minimum trip count; display totals or daily averages. Link filters do not change the denominator used for route shares.
 - Rank stations by activity or distinct neighbours. Colour the map by four weighted Louvain communities.
 - Read **The study** for hub concentration, daily rhythms, communities, a static station-removal experiment, coverage and limitations.
 - Download all station coordinates, full weighted OD edges, unmatched station names, metrics and source checksums from the study.
@@ -25,8 +27,11 @@ python3.12 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements-study.txt
 python -m cycles.publish --year 2026 --month 5
+python -m cycles.atlas              # compact views and lazy station detail
 python3 -m http.server 4173 --directory site
 ```
+
+The 45 interactive slices load a small overview first and fetch one station’s routes on selection. The full edge CSV remains downloadable; the browser never needs to load it or the legacy full-network JSON to draw the atlas. Canvas station markers are reused across interactions, and the study module loads only when opened.
 
 The monthly publisher discovers overlapping dated extracts, downloads just those files, captures current stations, normalizes and deduplicates records, checks that every calendar date is present, and exports nine day/time network slices. `--export-only` reuses downloaded, prepared inputs and the local station snapshot. A fresh API snapshot may change matches; the shipped `site/data/stations.csv` preserves the exact coordinates used for this release. Source byte sizes, ETags, SHA-256 hashes, snapshot time, settings and package versions are recorded in `site/data/meta.json`.
 
@@ -39,7 +44,7 @@ npm run check
 npm run test:browser              # with the local HTTP server running
 ```
 
-Browser checks cover desktop/mobile layouts, filters, station search, direction switching, communities, study navigation and a failed-data recovery state. Screenshots go to ignored `artifacts/`. Set `ATLAS_URL` to test another deployment.
+Browser checks cover desktop/mobile layouts, explicit route units and denominators, numbered pins, route selection that preserves the origin, bike/time/day filters, display-only link filters, daily rates, play/pause, reduced motion, study presets and retry after a failed detail fetch. Data checks conserve every arrival and departure across all 45 slices. Screenshots go to ignored `artifacts/`. Set `ATLAS_URL` to test another deployment.
 
 ### Publish
 
