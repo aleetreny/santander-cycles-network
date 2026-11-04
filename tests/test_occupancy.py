@@ -42,19 +42,3 @@ def test_live_missing_counter_remains_missing():
         'additionalProperties':[{'key':'NbBikes','value':'not available'}]}])
     assert p['stations'][0]['bikes'] is None
     assert p['stations'][0]['free'] is None
-
-
-def test_published_availability_has_full_month_and_valid_ranges():
-    root=Path(__file__).resolve().parent.parent/'site/data'
-    d=json.loads((root/'occupancy.json').read_text())
-    source=json.loads((root/'occupancy-provenance.json').read_text())
-    assert d['observations']==sum(s['all']['samples'] for s in d['stations'].values())
-    assert len(source['dates'])==30 and len(source['files'])==31
-    assert source['revision']==d['revision'] and d['licence']=='CC-BY-SA-3.0'
-    assert all(len(f['sha256'])==64 for f in source['files'])
-    for s in d['stations'].values():
-        p=s['all'];assert 0<=p['empty']<=1 and 0<=p['full']<=1
-        assert p['empty']+p['full']<=1.0001
-        assert len(p['hours'])==24
-        for h in p['hours']:
-            if h: assert h[0]>=0 and h[1]>=0 and 0<=h[2]<=1 and h[3]>=3

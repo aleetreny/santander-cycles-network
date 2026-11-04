@@ -1,7 +1,14 @@
-# Londres en bici
+# London, as the bikes see it
 
-The user explicitly replaced the complex network atlas with a simple station map. Primary task: move and zoom freely, select a station, and understand available bikes, free docks and typical hourly availability. Spanish interface.
+A portfolio piece for academic and industry readers: proof of fluency across the complex-networks toolkit, applied to real data, with findings worth telling.
 
-One map, a search field, a station list and a station sheet. Only three list orders: availability, frequently without bikes, frequently without docks. Selecting a station also shows its five typical directed connections, with trip counts, numbered endpoints and a simple outgoing/incoming switch. No play controls, study drawer or advanced filters. Keep the network research pipeline and frozen exports separately in the repository.
+Readers: a professor or PhD committee checking methodological depth, and a hiring manager in mobility or data science checking judgement and communication. Both should find, within a minute, a striking visual and a list of methods. Within ten minutes they should find honest, specific findings.
 
-Use actual BikePoint observations, not inferred occupancy from journey flows. Distinguish a current API query from a dated fallback. Expose September 2026 availability profiles and their sampling limitations. Publish to GitHub Pages and exercise the actual UI by hand before and after deployment.
+Form: an interactive essay, not a dashboard. Fourteen chapters, each one question → one family of methods → one finding, beside a persistent map instrument that reconfigures per chapter. It ends with a station explorer (useful, not decorative), a toolkit table, and data, method and limits notes.
+
+Principles:
+- Every number on the page comes from the data files. Nothing is typed twice.
+- Each binary measure is paired with a weighted measure or a null model, because the graph is dense.
+- Claims must survive a robustness check. Where a naive statistic misleads (pair-level commute correlation), use the robust one.
+- State limits plainly: docks are not routes, hires are not people, relocations are inferred.
+- English, for an international audience.

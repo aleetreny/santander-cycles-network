@@ -1,10 +1,8 @@
 {
-  "name": "london-by-bike",
+  "name": "london-as-the-bikes-see-it",
   "private": true,
   "scripts": {
-    "check": "node --check site/map.js"
-  },
-  "devDependencies": {
-    "playwright": "1.62.1"
+    "check": "for f in site/js/*.js; do node --check \"$f\" || exit 1; done",
+    "serve": "python3 tools/serve.py 4180"
   }
 }

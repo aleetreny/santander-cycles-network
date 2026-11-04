@@ -1,41 +1,24 @@
-# A simple complex networks project, with a complete research path
+# Study notes
 
-Research question: how do station-level journey flows organise London's Santander Cycles network, and how does this organisation vary by day type and commuting window?
+Unit of observation: one recorded hire. Node: a current BikePoint dock, matched by normalised name (all 801 names are unique). Directed edge i → j weighted by hires. Same-dock returns (3.75%) are kept in station totals but excluded from topology. 863,014 valid hires, 857,151 matched (99.32%). Six retired or renamed docks are excluded. Calendar: 19 working days and 12 weekend or bank-holiday days (4 and 25 May count as non-working). Rates are per day of the relevant type.
 
-Unit of observation: recorded hire, not person. Node: current docking station with matched name. Directed edge: observed origin–destination pair, weighted by number of hires. Coordinates are current, while the journey window is May 2026. Exclude unmatched endpoints from the graph and report them; keep all current nodes on the map. No GPS route reconstruction.
+## Chapters and their methods
 
-## Delivered core
+1. Graph basics. Density, reciprocity (binary and weighted, with a Poisson configuration null), components, paths.
+2. Heterogeneity. Continuous MLE tail fits with KS-optimal xmin, likelihood-ratio (Vuong) comparisons of power law, log-normal and exponential, Gini and Lorenz, strength–degree scaling.
+3. Backbone. Directed disparity filter, a link kept if significant at either end. Compared with a top-m weight threshold. Small-world check on the α = 0.05 backbone.
+4. Space. Doubly constrained gravity via IPF, deterrence fitted by Poisson ML (exponential, power, hybrid, exponential + river crossing). Production-constrained radiation model. Goodness of fit by CPC. Standardised Pearson residuals give over- and under-used links. River crossing: odd number of intersections between the dock-to-dock segment and the OSM Thames centre line.
+5. Centrality. Weighted PageRank (d = 0.85), HITS, eigenvector on the symmetrised graph. Betweenness and closeness on effective distance 1 − ln P_ij. Kendall τ between rankings.
+6. Mesoscale. Leiden (RB configuration) at γ ∈ {0.25 … 4}, 24 seeds per γ, best modularity kept, seed stability as mean pairwise NMI, labels matched across γ by Hungarian assignment. Null: Leiden on Poisson Chung–Lu graphs with the same expected strengths. Infomap: directed, two-level, 16 trials. Guimerà–Amaral roles with strengths.
+7. Higher order. Opsahl weighted rich club against weight reshuffles on fixed topology. Leung–Chau weighted assortativity. Barrat clustering. Directed triad census on the α = 0.01 backbone against 40 degree-preserving rewirings, giving the significance profile.
+8. Time. 48 hourly per-day layers, cosine similarity, average-linkage ordering, k-means (k = 5) regimes. Commute symmetry measured three ways: station net-balance correlation, weighted overlap with the reversed evening layer, and the fate of the 300 busiest morning links. Hourly PageRank leaders.
+9. Archetypes. k-means (k = 6, 50 inits) on z-scored, size-normalised 96-dimensional rhythms. Silhouettes reported for k = 4…8.
+10. Dynamics. Row-stochastic P including loops, stationary distribution, |λ2| and mixing time, total-variation decay. Validation: May working-day hourly net arrivals against the change in September weekday mean bikes, from BikePoint snapshots with each date weighted equally and at least 10 dates per hour.
+11. Relocations. Consecutive hires of the same bike where the next start dock differs from the last end dock. Rider vs operator net flows compared by Spearman correlation, plus the share of rider imbalance cancelled.
+12. Robustness. Static node removal by strength, betweenness, participation, distance from centre, or at random (20 orders). Journeys retained and giant component of the α = 0.001 backbone. Edge percolation weak-first vs strong-first by union–find. Topological overlap against weight.
+13. Multiplex. Classic, electric, working and free layers: density, decay, reciprocity, Leiden partition and NMI to the global partition. Battiston edge overlap, backbone Jaccard, log-weight correlation on shared links.
+14. Embedding. t-SNE (perplexity 35) on PCA-40 of Hellinger origin and destination profiles. Fruchterman–Reingold on the α = 0.01 backbone seeded by geography. Normalised-Laplacian eigenvectors 2–3. All Procrustes-aligned to geography. Trustworthiness and distance-rank correlation reported.
 
-1. **Auditable acquisition.** Two official extracts, SHA-256 checksums, fixed observation window, positive-duration and valid-time checks, identifier deduplication, complete calendar-date check, explicit unmatched endpoint audit.
-2. **Graph and hubs.** In/out strength, distinct neighbours, directed density, binary reciprocity, weak connected component. Keep same-station returns in endpoint totals but exclude them from topology and community detection. Full aggregates downloadable.
-3. **Time.** Nine complete network slices: every day / weekday / weekend × all hours / 07–10 / 16–19. Compare hourly profiles using journeys per day, not raw totals from unequal numbers of dates. Bank holidays remain weekdays.
-4. **Communities.** Weighted Louvain on symmetrised summed flows; fixed seed 42, resolution 1. Display this full-month partition consistently in temporal views, to avoid confusing algorithm changes with travel changes.
-5. **Stress test.** Static deletion of 10% of active nodes, once ranked by activity, compared with 100 seeded random deletions. Outcome is the share of observed journeys with both endpoints remaining; no rerouting prediction.
-6. **Communication.** Geographic station map, restrained strongest-edge view, directional station detail, explanatory study with genuine findings, explicit dates, coverage and caveats.
+## Things deliberately not claimed
 
-## Results of this snapshot
-
-- 863,014 valid hires; 857,151 matched (99.3206%). 5,863 hires excluded for at least one unmatched endpoint.
-- 801 current stations shown; 796 with at least one non-return edge. 212,532 directed non-loop pairs.
-- Directed density .335849; binary reciprocity .6595; largest weak component 796 nodes.
-- 4 Louvain communities; modularity .3668. This is descriptive structure, not evidence of an optimal or unique partition.
-- Top ten stations account for 4.494% of endpoint activity. Avoid an exaggerated "few hubs dominate everything" conclusion.
-- Removing 80 busiest active stations retains 60.614% of observed trip weights; random removal mean 81.427% (sample range 79.249%–83.861%). No causal closure effect is estimated.
-
-## Suggested presentation
-
-Lead with the geographic network and explain one station's spokes. Define degree versus strength with that real station. Compare weekday and weekend time profiles. Show spatial community structure, then stress-test activity concentration. Finish with the matching audit and the limitations of one month's data.
-
-## Extensions, deliberately outside the first release
-
-Compare a second complete month to measure partition stability and seasonal shifts. Test modularity against degree/strength-preserving null networks and repeat Louvain over seeds/resolutions. Compare strength inequality using a Lorenz curve and Gini coefficient. Only add betweenness after defining how flow weight becomes a distance or cost. Explore dock capacity and electric-bike composition as descriptive covariates; do not claim causal effects from this observational atlas.
-
-## Interactive second release
-
-The explorer now contains 45 exact slices: 3 day types × 5 start-time windows × 3 bike categories. The non-overlapping windows are 07–10, 10–16, 16–19 and 19–07; “all hours” includes all four. CLASSIC and PBSC_EBIKE exactly partition matched journeys in this snapshot. Daily averages divide by all calendar dates of the selected day type (31 days, 21 weekdays or 10 weekend days), not only dates on which a particular route was used.
-
-A station route row reports observed trip count, share of every matched departure/arrival at that station and median recorded hire duration. Same-dock returns remain in that denominator. Display filters for distance (great-circle dock distance), community relationship and minimum trip count do not renormalise the share. No route length, speed, distinct rider count or future destination probability is inferred.
-
-The worked example uses the user’s station: Margery Street → Guilford Street had 27 recorded weekday trips, out of 525 departures, across 21 weekdays: 5.1% and about 1.3 trips per weekday. It is the most frequent destination even though the majority of trips went elsewhere. The study adds a row-normalised community mixing matrix, a descriptive classic/electric comparison, a plain glossary and map presets for actual exploration.
-
-Implementation: `cycles.atlas` reads the same prepared, deduplicated and station-matched inputs and refuses changed monthly coverage. It publishes exact overview totals and top-200 link pools for each distance/community class, plus one lazy detail file per station. The browser uses persistent Canvas nodes and SVG only for the small visible set of connections. Full aggregates remain available for research.
+No causal effect of closures, no routes, no riders, no forecast. The occupancy check uses a different month, so its agreement is a lower bound on what a same-month test would show.

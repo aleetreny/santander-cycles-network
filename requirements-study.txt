@@ -1,6 +1,12 @@
-# Exact analysis versions used for the published May 2026 snapshot.
--r requirements.txt
-pandas==2.3.3
-duckdb==1.4.5
-networkx==3.2.1
-pyarrow==21.0.0
+# Exact versions used to build the published May 2026 study (Python 3.12).
+requests==2.34.2
+numpy==2.5.4
+pandas==3.1.0
+pyarrow==26.0.1
+duckdb==2.0.0
+scipy==1.18.1
+python-igraph==1.0.0
+igraph==1.0.0
+leidenalg==0.12.0
+infomap==2.16.0
+scikit-learn==1.9.1

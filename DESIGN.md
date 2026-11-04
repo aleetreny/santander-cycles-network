@@ -1,11 +1,15 @@
-# Simple station map
+# Design
 
-Map left, 350px station column right. On a phone the map comes first, with the station sheet below. Public Sans, white background, thin separators. Standard OpenStreetMap street geography. Teal means bikes and docks available, red no bikes, ochre no docks; grey means unavailable or unreliable data.
+Two surfaces. The essay sits on cool map paper (#eef1f0, dark mode #121a27) in Newsreader, with Bricolage Grotesque for headings, numbers and UI. The instrument is always night (#0d1626): stations glow on a dark London with the Thames (#17304f) and parks (#132a26) drawn from OpenStreetMap. One bold element, the instrument. Everything around it stays quiet.
 
-Use normal Leaflet camera behaviour. No selection-driven zoom, zoom callbacks that reposition the camera, moving overlay cards or layout changes on marker selection. A search result may centre its station. Resize invalidation happens only when the map dimensions actually change.
+Layout: essay column min(44vw, 600px) on the left, instrument sticky on the right at full height. Under 900 px the instrument is pinned on top (46svh) and the essay scrolls beneath it. Back matter (toolkit, notes) spans the full width after the frame.
 
-Every number has a unit: bikes, free docks, total spaces, readings or a clearly labelled percentage of observed consultations. A small 24-hour bar chart shows mean available bikes with a plain explanation and an optional table. Fullest/emptiest average hours and the largest mean increase are shown with actual counts.
+Colour jobs:
+- Diverging flow: amber #f2a33a = losing bikes or departures, blue #5aa8ff = gaining bikes or arrivals, slate #5b6880 = balanced.
+- Categorical (regions, archetypes, roles): validated night steps #3987e5, #d95926, #199e70, #c98500, #d55181, #2f9a2f, #9085e9. With four or more categories on the map, region names are drawn at their centres as secondary encoding.
+- Sequential magnitude on night: #24406b → #cfe6ff, or amber #3f2f1c → #ffcf7a for distance and stress.
+- Charts on paper use the light/dark token pairs --c1…--c6. Text never takes series colour.
 
-Focus states, keyboard search, reduced motion, loading/error states and honest fallback timestamps are required. Keep the screen simple; methodological detail stays in a small disclosure.
+Motion: one orchestrated moment, the animated working day (half an hour per second, sparks along the busiest links). Layout morphs between geography, flow space, force and spectral coordinates follow wall-clock time (1.3 s). Reduced motion: no particles, instant morphs, the clock stays paused.
 
-Typical station connections appear only for the selected station: five blue lines, thickness proportional to recorded trips, static arrowheads and numbered endpoint pins matching a short list. Clicking a line, pin or row highlights that connection while preserving the selected station and camera. Outgoing/incoming switch does not reframe the map. An explicit framing button may fit the five links. May journey counts remain clearly dated separately from September occupancy and current BikePoint availability.
+Interaction: drag to pan, ⌘/Ctrl + scroll or the +/− buttons to zoom. Plain scrolling always scrolls the essay. On touch screens the map never captures scrolling. Click a station anywhere to select it, and a pill offers to open it in the explorer. Every chart has a hover layer and a "Show the numbers" table.

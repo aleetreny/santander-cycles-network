@@ -31,7 +31,7 @@ def normalize(frame):
     data['day']=data.local.dt.date
     data['source_day']=data.utc.dt.date
     data['hour']=data.local.dt.hour
-    data['weekend']=data.local.dt.dayofweek.ge(5)
+    data['weekend']=data.local.dt.day_of_week.ge(5)
     data['fill']=data.bikes/(data.bikes+data.empty_docks)
     data['empty']=data.bikes.eq(0)
     data['full']=data.empty_docks.eq(0)

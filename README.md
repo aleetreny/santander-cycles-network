@@ -1,123 +1,87 @@
-# Santander Cycles · London's mobility network
+# London, as the bikes see it
 
-**UCL Complex Networks — reproducible Transport for London open-data project.**
+**A complex-network study of 857,151 Santander Cycles journeys (May 2026), told as an interactive essay.**
 
-Model docking stations as nodes and completed cycle-hire journeys as **directed, weighted origin–destination (OD) edges**. Explore a published static atlas or produce a standalone interactive HTML map, with inbound/outbound flows and a station matching quality report. **Lines connect origins and destinations; they are not inferred GPS cycling routes.**
+**[Open the essay →](https://aleetreny.github.io/santander-cycles-network/)**
 
-## Open the station map
+![The essay: text on the left, the network instrument on the right](docs/preview.png)
 
-**[Londres en bici →](https://aleetreny.github.io/santander-cycles-network/)**
+Docking stations are nodes and hires are directed, weighted links. Fourteen chapters each ask one question and answer it with one family of network-science tools. A single canvas, the *instrument*, reconfigures itself as you scroll: it replays a working day, filters the backbone, colours regions, closes stations, and morphs London into flow space. The essay ends with an explorer that gathers every measure for any of the 801 stations.
 
-The published interface is deliberately simple: one map, a station search and a station sheet. Drag the map, zoom with the mouse wheel or +/−, and select a station. Selecting a marker never resets the camera. Search centres the chosen station without changing zoom.
+## What it finds
 
-- **Current availability:** bikes to hire, free docking spaces, unavailable docks and TfL timestamps. The browser requests BikePoint directly. If that request fails, it clearly labels the dated saved copy; it never calls that copy live.
-- **Typical availability:** September 2026, 30 London dates, 2,272,425 usable archived BikePoint readings. Each station shows its empty/full reading fractions, hourly mean bikes/free docks, fullest/emptiest average hour and largest increase between adjacent hourly means.
-- **Two useful rankings:** stations most often observed without bikes, and stations most often observed without free docks. These are observed-reading percentages, not exact time percentages.
+| Question | Method | Finding |
+|---|---|---|
+| What is the network? | Directed weighted graph, Poisson null for reciprocity | 796 stations and 212,532 links, density 34%. The binary graph is nearly saturated, so the signal is in the weights. |
+| Are there hubs? | Clauset–Shalizi–Newman tail fits, Vuong tests, Lorenz/Gini | No scale-free stations, because dock capacity caps them. Link weights are log-normal (Gini 0.54), and 13% of links carry half the trips. s ∝ k^1.26. |
+| Which links matter? | Disparity filter (Serrano et al. 2009) | At α = 0.001, 2,578 links keep 767 stations. A weight threshold of the same size keeps 660. The backbone is a small world. |
+| What does distance explain? | Doubly constrained gravity (IPF + Poisson MLE), radiation model | Exponential decay of 0.57/km reproduces 55% of flows (CPC). Radiation fails (14%). |
+| Is the Thames a barrier? | River-crossing term on OpenStreetMap geometry | Crossing costs about 0.48 km of extra riding. Below 1 km, cross-river pairs get 71% of predicted trips. |
+| Which corridors beat geography? | Standardised gravity residuals | Student halls to campuses (Great Dover Street → Kingsway/LSE), park loops in Hyde Park, Bow ↔ Mile End. |
+| Who is central? | PageRank, HITS, eigenvector, betweenness/closeness on effective distance (Brockmann–Helbing) | Strength ≈ PageRank (τ 0.93). Betweenness singles out bridges: St James's Square, Bank, Waterloo. |
+| Are there regions? | Leiden over resolutions and seeds, weighted configuration null, Infomap, Laplacian eigengap | 4 regions, Q = 0.374 (z ≈ 1,565 vs null). Infomap agrees (NMI 0.81). The eigengap gives an east–west split at the top level. |
+| Who bridges them? | Guimerà–Amaral roles | 20 connector hubs: King's Cross, Waterloo, Soho, Old Street, London Bridge, Liverpool Street. |
+| Higher-order structure? | Weighted rich club, assortativity, directed triad census vs 40 degree-preserving rewirings | Rich club 7× for the top 10. Neutral mixing. Fully reciprocal triangles z ≈ 1,000. |
+| When does it change? | 48 hourly layers, cosine similarity, k-means regimes, time-resolved PageRank | Five regimes. Morning and evening station balances r = −0.93. The centre moves Bank → Exhibition Road → Waterloo. |
+| What kinds of station exist? | k-means on 96-dimensional rhythms | Six archetypes. Railway termini behave like homes. |
+| Where would bikes pile up? | Markov chain, spectral gap, out-of-sample check on September occupancy | A bike forgets its start after about 4 rides. May flows predict September dock changes (r = 0.67; median 0.80 per station). |
+| Who moves the bikes back? | Trajectory reconstruction from 11,531 bike ids | 37,139 hidden relocations. The operator mirrors the riders (ρ = −0.97) and cancels 87% of their imbalance. |
+| What would break it? | Targeted vs random closures, edge percolation, topological overlap (Onnela et al. 2007) | The backbone shatters after about 25% of busiest stations close. Weak ties bridge, strong ties sit inside neighbourhoods. |
+| Do e-bikes make another network? | Multiplex overlap (Battiston et al. 2014) | Longer trips, slower decay, few return trips. Only 8% of the backbone is shared with classic bikes. |
+| What does London look like in flow space? | t-SNE, force layout, spectral coordinates, Procrustes | The flow map keeps 99.6% trustworthiness and is still London (ρ 0.94 with geography). |
 
-Selecting a station shows its **five typical outgoing or incoming connections** as straight lines, with arrowheads, numbered endpoint pins and explicit recorded-trip counts. Thicker lines mean more trips. These use the pinned **May 2026** journey study; they are not current traffic or street routes. Click a line or row to highlight it without switching station or changing the camera; the framing button is an explicit camera action. No animations, community controls or study overlays. The original network research pipeline and its frozen May 2026 exports remain in the repository for reproducibility. They are excluded from the Pages artifact.
+Numbers in the essay are filled in from the data files when the page loads, so the text cannot drift away from the charts after a rebuild.
 
-### Run and verify
+## Run it
 
 ```bash
-python3 -m http.server 4173 --directory site
-npm run check
-pip install -r requirements-dev.txt
+python3 tools/serve.py 4180     # then open http://127.0.0.1:4180
+```
+
+The published data is committed under `site/data/`, so no Python is needed to view the essay.
+
+## Rebuild the study
+
+```bash
+python3.12 -m venv .venv && source .venv/bin/activate
+pip install -r requirements-study.txt pytest     # exact versions used; requirements.txt has ranges
+python -m cycles inventory && python -m cycles fetch && python -m cycles stations && python -m cycles prepare
+python -m cycles trips          # clean, deduplicate, match to docks  → data/derived/trips.parquet
+python -m cycles build --fresh  # every chapter (~6 min)               → site/data/*.json
 pytest -q
 ```
 
-Open `http://127.0.0.1:4173/`. The user-facing interactions are verified manually in the browser; see [manual QA](docs/MANUAL_QA.md). The older `tests/browser.cjs` targets the retired network interface and is retained only as historical research tooling; it is not a check of the current page.
+`cycles build` caches each chapter in `data/derived/cache/`. Without `--fresh`, it recomputes only the chapters whose cache files are missing. Seeds are fixed (42). The occupancy validation also needs the September 2026 BikePoint archive under `data/occupancy/`, fetched by `cycles/occupancy.py`. The Thames and park outlines in `data/osm/` come from OpenStreetMap.
 
-### Rebuild availability statistics
+## Layout
 
-```bash
-pip install -r requirements-study.txt
-python -m cycles.occupancy --month 2026-09
-# Compact typical routes from the existing pinned journey exports:
-python -m cycles.connections
-# Reuse the same downloaded files and pinned source revision:
-python -m cycles.occupancy --month 2026-09 --offline
+```
+cycles/
+  acquire.py, prepare.py   TfL S3 inventory, download, schema normalisation to Parquet
+  occupancy.py             BikePoint occupancy archive (September 2026)
+  trips.py                 stage 1: one clean, station-matched journey table
+  geo.py                   Thames and parks basemap, river-crossing matrix
+  analysis/                one module per family of methods
+    structure.py           distributions, centrality, mixing, cores, rich club, motifs
+    backbone.py            disparity filter
+    space.py               gravity, radiation, river penalty, residual corridors
+    communities.py         Leiden, Infomap, null models, roles
+    temporal.py            hourly layers, regimes, commute symmetry, archetypes, the animated day
+    flows.py               Markov drift, relocations, occupancy validation
+    robustness.py          closures, percolation, weak ties
+    layers.py              multiplex comparison
+    embedding.py           t-SNE, force and spectral layouts
+  build.py                 runs the chapters and writes the site's JSON
+site/                      static page: HTML, CSS, ES modules, d3, self-hosted fonts
+tests/                     unit tests on toy graphs + consistency checks on the published JSON
 ```
 
-The exporter includes the preceding UTC day, selects the exact London calendar month, rejects impossible counters and zero usable docks, deduplicates station/timestamp readings, and joins versioned station references by UTC source date. Hourly means give each observed date equal weight. Hours with fewer than three observed dates remain missing. The UI requires at least 14 dates and 100 readings, and a historic location within 150 m of the current station. The archive lacks historical locked status; this limitation is visible in the source disclosure.
+## Data and licences
 
-Inputs remain ignored under `data/occupancy/`. Outputs include source URLs, the pinned Hugging Face revision, SHA-256 hashes, raw/retained row counts and all observed dates. Availability data and derived statistics are **CC BY-SA 3.0**, attributed to TfL and Francisco Feregrino. Code is MIT.
+- Journeys: [TfL cycle hire usage stats](https://cycling.data.tfl.gov.uk/), extracts 443–444 (1–31 May 2026). Powered by TfL Open Data. Contains OS data © Crown copyright and database rights 2016 and Geomni UK Map data © and database rights 2019.
+- Stations: [TfL BikePoint API](https://api.tfl.gov.uk/BikePoint), snapshot 20 October 2026.
+- Occupancy: [feregrino/london-cycles](https://huggingface.co/datasets/feregrino/london-cycles), CC BY-SA 3.0. Derived occupancy numbers are shared under the same licence.
+- River and parks: © OpenStreetMap contributors, ODbL.
+- Fonts: Bricolage Grotesque and Newsreader (SIL OFL). d3 (ISC). Code: MIT.
 
-`site/data/live.json` is a dated fallback, not an automatic collector. It is generated with `cycles.occupancy.compact_live` from a real BikePoint response. Current data are requested whenever the page opens and when **Actualizar disponibilidad** is pressed. No background scheduler is configured.
-
-### Publish
-
-Pushing `site/` changes to `main` triggers `.github/workflows/pages.yml`. Pages stages only the current page, its assets and the availability/compact connection JSON files; it does not upload legacy journey exports. No backend or API keys are needed. Map tiles need an internet connection. Leaflet and fonts are self-hosted with their licences.
-
-## Data sources
-
-- [TfL historical cycle hire journey CSVs](https://cycling.data.tfl.gov.uk/) — weekly/fortnightly extracts from September 2015. Direct public S3 listing: `https://s3-eu-west-1.amazonaws.com/cycling.data.tfl.gov.uk/?list-type=2&prefix=usage-stats/` (no authentication).
-- [Availability archive: feregrino/london-cycles](https://huggingface.co/datasets/feregrino/london-cycles) — versioned TfL station observations; CC BY-SA 3.0.
-- [TfL BikePoint Unified API](https://api.tfl.gov.uk/BikePoint) — current station coordinates, docking capacity, current availability. Not a historic inventory.
-
-TfL attribution: **Powered by TfL Open Data. Contains OS data © Crown copyright and database rights 2016; Geomni UK Map data © and database rights 2019.** See [TfL transport-data terms](https://tfl.gov.uk/corporate/terms-and-conditions/transport-data-service). Data copyright/licence remains with original owners. Code herein is MIT-licensed.
-
-## Quick start (macOS/Linux; Python 3.10+)
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-python -m cycles inventory       # discover every historical CSV and print download size
-python -m cycles fetch --limit 2 # pilot: get two TfL CSVs (use `fetch` to get ALL)
-python -m cycles stations        # save BikePoint JSON snapshot and station CSV
-python -m cycles prepare --limit 2  # standardize to compressed Parquet
-python -m cycles network         # build OD graph across every prepared file
-python -m cycles map --top 150   # create outputs/network_map.html
-open outputs/network_map.html
-```
-
-### Download the entire available historical archive
-
-```bash
-python -m cycles inventory
-python -m cycles fetch --workers 3
-python -m cycles stations
-python -m cycles prepare
-python -m cycles network --year 2025
-python -m cycles map --top 200
-```
-
-`python -m cycles all --year 2025` runs the entire pipeline. **Estimate the storage from `inventory` first.** Downloads are idempotent and size-checked against S3 listing. Raw CSV/ZIP files, converted Parquet and generated maps are ignored by Git; they stay on your computer. The source manifest lists download URLs, byte sizes and publication dates. The primary source is refreshed by rerunning `inventory` and `fetch`. If a source CSV is replaced without changing size, delete that file and rerun, or verify the published ETag manually.
-
-Useful options: `network --year 2026 --month 9 --day-type weekday`; `network --start-hour 7 --end-hour 10 --day-type weekday` for morning commute; `network --bike-model ELECTRIC` (model only available in newer extracts); `map --top 80 --min-journeys 30`.
-
-## Project layout
-
-```text
-cycles/acquire.py      S3 public XML inventory, concurrent downloads, BikePoint API snapshots
-cycles/prepare.py      CSV schema adaptation (2015–2026), timestamp cleanup, Parquet
-cycles/network.py      de-duplicated directed OD aggregation, station geocoding, QA
-cycles/viz.py          standalone Folium HTML (map tiles need internet)
-cycles/__main__.py     CLI
-requirements.txt       locked major ranges
-tests/                 schema and API regression tests
-data/                  runtime data (ignored by git)
-outputs/               OD edges, nodes, QA report, HTML network map (ignored by git)
-```
-
-## Key methodological caveats
-
-1. **Publication lag:** the newest journey extracts may be several weeks behind current time, while BikePoint is live.
-2. **Station history:** stations may be closed, renamed or relocated. The current BikePoint snapshot cannot accurately geolocate every historical station. Join by ID *and* name when possible, else by unique normalized name; unmatched nodes remain in `nodes.csv` and are explicitly excluded from maps. Inspect `outputs/quality.txt` and quantify the missing share before publishing.
-3. **Schemas change:** old `Rental Id/Duration/Bike Id/...` and new `Number/Total duration (ms)/Bike model/...` are harmonized, but previously unseen columns should raise a visible error.
-4. **Duplicates:** some historical extracts overlap. `network` de-duplicates valid trip identifiers before OD aggregation. Some records without IDs have only a conservative composite fallback.
-5. **Time:** timestamp strings are interpreted as local London wall time without forced timezone conversion. DST-transition times need extra care in hour-of-day studies.
-6. **Bias:** a recorded journey is a hire, not an individual person. OD edges are not street-level GPS paths. Redistribution by operators and dockless cycling are not represented as normal customer journeys.
-7. **Scale:** the complete archive can occupy many gigabytes. Prefer year-specific network aggregations and avoid importing every trip into an in-memory pandas DataFrame. DuckDB reads columnar Parquet files and does the group-by itself.
-
-## Research options
-
-- **Core:** directed station-level network; in/out strength and hub hierarchy, degree distributions, edge-weight heterogeneity.
-- **Temporal:** compare months, weekdays/weekends and commuting peaks via `--start-hour/--end-hour`.
-- **Advanced:** Leiden/Louvain communities, weighted betweenness, flow persistence, nestedness, null-model comparisons, network resilience.
-
-This first version creates a useful map; **it does not yet claim to answer a publishable research question or reconstruct historical bike movements perfectly**. Confirm the station matching coverage and choose a precise hypothesis before drawing causal conclusions.
-
-## Status
-
-The project includes scripts and regression tests. The full TfL journey archive is **not bundled in GitHub or the downloadable project ZIP**; download it from TfL by running the supplied pipeline. This is deliberate: GitHub is unsuitable for multi-GB raw datasets. Public source files are not mirrored here.
+Limits are stated in the essay. In short: lines join docks and are not routes ridden, a hire is not a person, one month cannot separate season from habit, relocations are inferred, and closure curves assume no rerouting.

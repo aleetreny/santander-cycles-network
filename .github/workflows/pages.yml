@@ -1,4 +1,4 @@
-name: Publish station map
+name: Publish site
 on:
   push:
     branches: [main]
@@ -20,12 +20,12 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: actions/configure-pages@v5
-      - name: Stage simple station map
+      - name: Stage the essay and its data
         run: |
           mkdir -p _site/data
-          cp site/index.html site/map.js site/simple.css site/favicon.svg site/fonts.css _site/
-          cp -R site/fonts site/vendor _site/
-          cp site/data/live.json site/data/occupancy.json site/data/occupancy-provenance.json site/data/connections.json _site/data/
+          cp site/index.html site/favicon.svg site/.nojekyll _site/
+          cp -R site/css site/js site/fonts site/vendor _site/
+          cp site/data/*.json _site/data/
       - uses: actions/upload-pages-artifact@v4
         with:
           path: _site

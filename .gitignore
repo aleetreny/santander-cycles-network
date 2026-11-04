@@ -16,3 +16,6 @@ node_modules/
 artifacts/
 data/occupancy/
 _site/
+
+# Derived study tables and cached chapter results (rebuilt by python -m cycles.build).
+data/derived/

@@ -1,23 +1,488 @@
 <!doctype html>
-<html lang="es">
+<html lang="en">
 <head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Londres en bici · estaciones Santander</title>
-<meta name="description" content="Un mapa sencillo de estaciones Santander: bicis, huecos libres y ocupación habitual por horas.">
-<link rel="icon" href="./favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="./fonts.css?v=3"><link rel="stylesheet" href="./vendor/leaflet.css"><link rel="stylesheet" href="./simple.css?v=4">
-<script src="./vendor/leaflet.js" defer></script><script src="./map.js?v=4" type="module"></script>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>London, as the bikes see it</title>
+<meta name="description" content="A complex-network study of 857,151 Santander Cycles journeys in London (May 2026): heavy tails, backbones, gravity and the Thames, communities, motifs, temporal regimes, hidden rebalancing, robustness and flow-space embeddings.">
+<meta name="theme-color" content="#0d1626">
+<meta property="og:title" content="London, as the bikes see it">
+<meta property="og:description" content="857,151 bike-share journeys read as a complex network.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="preload" href="fonts/bricolage-grotesque-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="fonts/newsreader-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="css/site.css">
+<script src="vendor/d3.min.js" defer></script>
+<script type="module" src="js/main.js"></script>
 </head>
 <body>
-<header><h1>Londres en bici<span>.</span></h1><p>Estaciones Santander</p><button id="refresh">Actualizar disponibilidad</button><span id="updated" role="status">Cargando estaciones…</span></header>
-<main>
-<section class="map-wrap" aria-label="Mapa de estaciones"><div id="map" aria-label="Mapa de Londres. Arrastra para moverte; usa la rueda o los botones más y menos para cambiar el zoom."></div><button id="london">Ver Londres</button><p id="route-key" class="route-key" hidden></p><div id="legend" class="legend"><span><i class="empty"></i>Sin bicis</span><span><i class="normal"></i>Con bicis y huecos</span><span><i class="full"></i>Sin huecos</span></div><p id="map-message" role="status" hidden></p></section>
-<aside aria-label="Estaciones y estadísticas">
-<div class="search"><label for="search">Buscar estación</label><input id="search" type="search" placeholder="Por ejemplo, Waterloo" autocomplete="off" aria-controls="results"><div id="results" aria-live="polite"></div></div>
-<section id="browse"><div class="list-title"><h2>Estaciones</h2><label class="sr-only" for="order">Ordenar estaciones</label><select id="order"><option value="current">Disponibilidad</option><option value="full">Se quedan sin huecos</option><option value="empty">Se quedan sin bicis</option></select></div><p id="list-caption" class="muted">Pulsa una estación para ver sus trayectos y disponibilidad.</p><ol id="station-list"></ol><button id="more" class="text-button">Mostrar más estaciones</button></section>
-<section id="detail" hidden aria-live="polite"></section>
-<footer><details><summary>Datos y cómo se calculan</summary><p>La disponibilidad actual viene de <a href="https://api.tfl.gov.uk/BikePoint">TfL BikePoint</a>. La hora de cada dato aparece en su ficha. Las plazas fuera de servicio no cuentan como huecos libres.</p><p>El perfil habitual usa lecturas reales del 1 al 30 de septiembre de 2026 del archivo <a href="https://huggingface.co/datasets/feregrino/london-cycles">feregrino/london-cycles</a>, recogidas de TfL. No se estima la ocupación a partir de viajes.</p><p>Los trayectos habituales son los cinco enlaces con más viajes de mayo de 2026, en cada sentido, según los <a href="https://cycling.data.tfl.gov.uk/">extractos de viajes de TfL</a>. Se excluyen viajes que regresan a la misma estación. Sus líneas unen las ubicaciones usadas en el estudio; no muestran el recorrido por calles ni tráfico actual. <a href="./data/connections.json" download>Datos y fuentes de los trayectos</a>.</p><p>Los porcentajes cuentan lecturas sin bicis o sin huecos; no son porcentajes exactos de tiempo. El muestreo es irregular y el archivo no registra si una estación estaba bloqueada. Las medias por hora dan el mismo peso a cada fecha. Se omiten horas con menos de tres fechas y lecturas con contadores imposibles o sin plazas en servicio.</p><p>Las horas se muestran en horario de Londres. Solo se asocia el historial si la estación histórica está a menos de 150 metros de la ubicación actual.</p><p><a href="./data/occupancy-provenance.json" download>Fuentes y comprobaciones de los datos</a> · <a href="https://github.com/aleetreny/santander-cycles-network">Código</a></p><p>Powered by TfL Open Data. Archivo de disponibilidad y estadísticas derivadas: <a href="https://creativecommons.org/licenses/by-sa/3.0/">CC BY-SA 3.0</a>, atribución a TfL y Francisco Feregrino; transformado en medias y porcentajes. Contains OS data © Crown copyright and database rights 2016. Código MIT. Proyecto independiente.</p></details></footer>
-</aside>
+<a class="skip" href="#explorer">Skip to the station explorer</a>
+<div class="frame">
+
+<main class="essay" id="essay">
+
+<header class="opening step" data-scene="pulse">
+  <h1>London, as the bikes see it</h1>
+  <p class="lede">Every Santander Cycles hire in May 2026, read as a complex network: who rides where, when the city changes shape, how it splits into regions, and who quietly moves the bikes back.</p>
+  <ul class="facts" aria-label="The data at a glance">
+    <li><span class="big" data-v="meta.report.matchedJourneys" data-f="int"></span><span class="lab">journeys</span></li>
+    <li><span class="big" data-v="summary.activeNodes" data-f="int"></span><span class="lab">docking stations</span></li>
+    <li><span class="big" data-v="summary.edges" data-f="int"></span><span class="lab">directed links</span></li>
+    <li><span class="big" data-v="meta.report.bikes" data-f="int"></span><span class="lab">individual bikes</span></li>
+    <li><span class="big" data-v="meta.report.calendarDays" data-f="int"></span><span class="lab">days, all complete</span></li>
+    <li><span class="big" data-v="communities.groups.length" data-f="int"></span><span class="lab">regions found twice</span></li>
+  </ul>
+  <p class="byline">The map replays a typical working day at half an hour per second. Amber docks are losing bikes, blue docks are gaining them, and each spark is a journey on one of the busiest links of that half hour.</p>
+  <a class="scroll-cue" href="#c1"><svg viewBox="0 0 14 14" aria-hidden="true"><path d="M7 1v11M2 7l5 5 5-5" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg>Fourteen questions, one network</a>
+</header>
+
+<!-- 1 -->
+<section class="chapter" id="c1" aria-labelledby="h1">
+  <div class="chapter-head"><span>1</span><span class="tool">Directed weighted graph</span></div>
+  <h2 id="h1">What exactly is the network?</h2>
+  <div class="step" data-scene="graph">
+    <p>Each docking station is a node. Each hire from dock <em>i</em> to dock <em>j</em> adds one unit of weight to the directed link <em>i → j</em>. Hires that return to the dock they left (<span class="num" data-v="summary.selfLoopShare" data-f="pct1"></span> of the total) count towards a station's activity but stay out of the topology.</p>
+    <table class="ledger">
+      <tbody>
+        <tr><td>Stations with at least one journey</td><td data-v="summary.activeNodes" data-f="int"></td></tr>
+        <tr><td>Directed links used at least once</td><td data-v="summary.edges" data-f="int"></td></tr>
+        <tr><td>Density <span class="muted">(links used ÷ links possible)</span></td><td data-v="summary.density" data-f="pct1"></td></tr>
+        <tr><td>Mean partners per station</td><td data-v="summary.meanDegree" data-f="int"></td></tr>
+        <tr><td>Links also used in reverse</td><td data-v="summary.reciprocityBinary" data-f="pct1"></td></tr>
+        <tr><td>Trip weight returned <span class="muted">(Poisson null: <span data-v="summary.reciprocityWeightedNull" data-f="pct1"></span>)</span></td><td data-v="summary.reciprocityWeighted" data-f="pct1"></td></tr>
+        <tr><td>Strongly connected components</td><td data-v="summary.strongComponents" data-f="int"></td></tr>
+        <tr><td>Mean shortest path, diameter <span class="muted">(hops)</span></td><td><span data-v="summary.meanPath" data-f="f2"></span>, <span data-v="summary.diameter" data-f="int"></span></td></tr>
+      </tbody>
+    </table>
+    <p class="finding">A third of all possible links exist, and any two stations are at most three hops apart. At this density the yes-or-no graph says very little. The information is in the weights.</p>
+    <p>So every chapter that follows either uses the weights or compares the network with a null model that keeps them. The map shows the <span data-v="derived.heavyShown" data-f="int"></span> heaviest links, which together carry <span class="num" data-v="derived.heavyShare" data-f="pct0"></span> of all journeys.</p>
+  </div>
+</section>
+
+<!-- 2 -->
+<section class="chapter" id="c2" aria-labelledby="h2">
+  <div class="chapter-head"><span>2</span><span class="tool">Heavy tails, maximum likelihood, Lorenz curves</span></div>
+  <h2 id="h2">How unequal is the traffic?</h2>
+  <div class="step" data-scene="strength">
+    <p>Less than you might expect for the stations. A station's <em>strength</em> is its journeys in plus out. Fitting its upper tail by maximum likelihood (Clauset, Shalizi and Newman's method) gives a power-law exponent of <span class="num" data-v="distributions.fitStrength.alpha" data-f="f2"></span>, but only for the top <span data-v="distributions.fitStrength.n" data-f="int"></span> stations, and a log-normal describes the same tail just as well (Vuong's test, <span class="num" data-v="distributions.fitStrength.powerVsLognormal.p" data-f="p"></span>). There are busy stations, but no runaway hubs. A dock has a fixed number of slots, and that limits how big any one station can grow.</p>
+    <figure class="chart" id="fig-ccdf">
+      <div class="chart-title">Share of stations or links with at least this many journeys</div>
+      <div class="plot"></div>
+      <figcaption>Complementary cumulative distributions on log–log axes. Dashed: maximum-likelihood log-normal fits above each <em>x</em><sub>min</sub>. Straight lines would mean a power law.</figcaption>
+    </figure>
+    <p>The links are a different story. <span class="num" data-v="distributions.edgesSingleTrip" data-f="pct0"></span> of the station pairs in use saw a single journey all month, while <span class="num" data-v="distributions.edgesForHalf" data-f="pct0"></span> of the links carry half of all trips. The link Gini coefficient is <span class="num" data-v="distributions.giniWeight" data-f="f2"></span>, against <span class="num" data-v="distributions.giniStrength" data-f="f2"></span> for stations. Link weights are log-normal, and a pure power law is rejected (<span class="num" data-v="distributions.fitWeight.powerVsLognormal.p" data-f="p"></span>).</p>
+    <figure class="chart" id="fig-lorenz">
+      <div class="chart-title">Lorenz curves: how concentrated the traffic is</div>
+      <div class="plot"></div>
+      <figcaption>The diagonal is perfect equality. The further a curve sags below it, the more the traffic piles onto a few stations or links.</figcaption>
+    </figure>
+    <p>Strength grows faster than the number of partners: <em>s</em> ∝ <em>k</em><sup><span data-v="distributions.strengthDegree.beta" data-f="f2"></span></sup> (R² = <span data-v="distributions.strengthDegree.r2" data-f="f2"></span>). A station with more partners also sends more trips down each one (Barrat et al., 2004), so busy stations are busy because of heavy links as well as many links.</p>
+    <figure class="chart" id="fig-sk">
+      <div class="chart-title">Strength against degree, one dot per station</div>
+      <div class="plot"></div>
+      <figcaption>Orange: the fitted <em>s</em> ∝ <em>k</em><sup>β</sup>. Grey: the linear case β = 1, where every link has the same average weight.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- 3 -->
+<section class="chapter" id="c3" aria-labelledby="h3">
+  <div class="chapter-head"><span>3</span><span class="tool">Disparity filter (Serrano, Boguñá and Vespignani, 2009)</span></div>
+  <h2 id="h3">Which links actually matter?</h2>
+  <div class="step" data-scene="backbone">
+    <p>Keeping only the heaviest links would erase the outer boroughs, whose links are all small. The disparity filter judges each link locally instead. It asks whether the link takes a larger share of its station's traffic than a random split would give, and keeps it if the probability <em>α</em> of that happening by chance is small, at either end.</p>
+    <div class="controls">
+      <label class="range">Significance <em>α</em>
+        <input type="range" id="alpha" min="2" max="6" step="0.5" value="2" aria-describedby="alpha-out">
+        <output id="alpha-out">0.01</output>
+      </label>
+      <div class="seg" role="group" aria-label="Filter">
+        <button type="button" data-filter="disparity" aria-pressed="true">Disparity filter</button>
+        <button type="button" data-filter="naive" aria-pressed="false">Same number, heaviest</button>
+      </div>
+    </div>
+    <p id="backbone-readout" class="small muted" aria-live="polite"></p>
+    <figure class="chart" id="fig-backbone">
+      <div class="chart-title">Stations that keep at least one link</div>
+      <div class="plot"></div>
+      <figcaption>Both filters keep the same number of links at each <em>α</em>. Only the disparity filter holds on to the quieter outer stations.</figcaption>
+    </figure>
+    <p class="finding">At <em>α</em> = 0.001 the filter keeps <span data-v="derived.bb3.edges" data-f="int"></span> links and <span data-v="derived.bb3.nodes" data-f="int"></span> stations. A weight threshold keeping the same number of links drops to <span data-v="derived.bb3.naiveNodes" data-f="int"></span> stations.</p>
+    <p>On the backbone at <em>α</em> = 0.05, a station's neighbours are linked to each other with probability <span class="num" data-v="summary.backboneClustering" data-f="f2"></span>. A random graph with the same density gives <span class="num" data-v="summary.backboneClusteringRandom" data-f="f3"></span>. Average paths are only <span data-v="derived.pathRatio" data-f="f2"></span>× longer than random. That is a small world (Watts and Strogatz): clustered neighbourhoods joined by short cuts.</p>
+  </div>
+</section>
+
+<!-- 4 -->
+<section class="chapter" id="c4" aria-labelledby="h4">
+  <div class="chapter-head"><span>4</span><span class="tool">Spatial networks, gravity and radiation models</span></div>
+  <h2 id="h4">How far will people ride, and what bends the rule?</h2>
+  <div class="step" data-scene="space">
+    <p>Half of all classic-bike hires end less than <span class="num" data-v="space.lengths.classic.median" data-f="km"></span> from where they started, in a straight line. For e-bikes the median is <span class="num" data-v="space.lengths.electric.median" data-f="km"></span>.</p>
+    <figure class="chart" id="fig-lengths">
+      <div class="chart-title">Straight-line distance between docks, share of hires</div>
+      <div class="plot"></div>
+      <figcaption>Same-dock returns excluded. Each point is a 200 m bin.</figcaption>
+    </figure>
+    <p>How much of the network does distance explain on its own? A <em>doubly constrained gravity model</em> fixes every station's real departures and arrivals, using iterative proportional fitting, and leaves one free function: how trips decay with distance. Fitted by Poisson maximum likelihood, an exponential decay of <span class="num" data-v="derived.betaExp" data-f="f2"></span> per km reproduces <span class="num" data-v="derived.cpcExp" data-f="pct0"></span> of all flows, measured by the common part of commuters. Trips halve every <span data-v="derived.halfKm" data-f="f1"></span> km. A power law fits much worse. The radiation model, built for commuting between cities, fails at this scale (<span data-v="derived.cpcRad" data-f="pct0"></span>).</p>
+    <figure class="chart" id="fig-decay">
+      <div class="chart-title">Average journeys per station pair, by distance</div>
+      <div class="plot"></div>
+      <figcaption>Dots: observed. Line: the best gravity model. Each point averages every pair of active stations in a 250 m distance band.</figcaption>
+    </figure>
+    <figure class="chart" id="fig-models">
+      <div class="chart-title">Share of flows reproduced by each model (CPC)</div>
+      <div class="plot"></div>
+    </figure>
+    <p class="finding">The Thames is a barrier. Crossing it costs the same as riding an extra <span data-v="space.river.kmEquivalent" data-f="km"></span>.</p>
+    <p>Adding one parameter for whether the straight line between two docks crosses the river improves the model by thousands of log-likelihood units. Below 1 km, pairs on opposite banks get <span data-v="derived.riverShort.cross" data-f="pct0"></span> of the trips that distance alone predicts, while same-bank pairs get <span data-v="derived.riverShort.same" data-f="pct0"></span>. Even in central London, bridges are scarce and the river is wide.</p>
+  </div>
+  <div class="step" data-scene="corridors">
+    <h3>Corridors that beat geography</h3>
+    <p>The interesting part is what the model gets wrong. The map now shows the links with the largest standardised residuals: many more trips than size, distance and the river predict. The <span class="legend-inline">amber</span> links carry more than expected. They are not random. Student halls on Great Dover Street feed the LSE and King's College around Kingsway and Houghton Street, even though the trip crosses the river. Leisure loops run through Hyde Park and Kensington Gardens, and short hops cross Bow and Mile End.</p>
+    <ol id="corridor-list" class="small"></ol>
+    <div class="controls">
+      <div class="seg" role="group" aria-label="Show">
+        <button type="button" data-corr="over" aria-pressed="true">More trips than expected</button>
+        <button type="button" data-corr="under" aria-pressed="false">Fewer than expected</button>
+      </div>
+    </div>
+    <p class="small muted">The opposite list shows pairs the model expects to be busy that people avoid. Most are short crossings near big stations, like Waterloo to Westminster Pier across the river, or into the Olympic Park.</p>
+  </div>
+</section>
+
+<!-- 5 -->
+<section class="chapter" id="c5" aria-labelledby="h5">
+  <div class="chapter-head"><span>5</span><span class="tool">PageRank, HITS, eigenvector, betweenness on effective distance</span></div>
+  <h2 id="h5">Which stations are central, and in what sense?</h2>
+  <div class="step" data-scene="centrality">
+    <p>"Central" means different things. <em>PageRank</em> is where a random rider who keeps hiring ends up. <em>Hubs</em> and <em>authorities</em> (HITS) separate stations that send trips to important destinations from the destinations themselves. <em>Betweenness</em> and <em>closeness</em> need a notion of distance. Here they use Brockmann and Helbing's effective distance, 1 − ln <em>P<sub>ij</sub></em>, where <em>P<sub>ij</sub></em> is the share of station <em>i</em>'s riders who go to <em>j</em>. A link is short if many riders use it.</p>
+    <div class="controls">
+      <label for="measure">Measure</label>
+      <select id="measure">
+        <option value="pagerank">PageRank</option>
+        <option value="betweenness">Betweenness (effective distance)</option>
+        <option value="closeness">Closeness (effective distance)</option>
+        <option value="hub">HITS hub score</option>
+        <option value="authority">HITS authority score</option>
+        <option value="eigenvector">Eigenvector</option>
+        <option value="strength">Strength</option>
+      </select>
+    </div>
+    <ol id="central-list" class="small"></ol>
+    <figure class="chart" id="fig-kendall">
+      <div class="chart-title">How much the rankings agree (Kendall's τ)</div>
+      <div class="plot"></div>
+      <figcaption>Strength and PageRank rank the stations almost identically. Betweenness is the outlier: it rewards stations that sit <em>between</em> regions rather than busy ones.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- 6 -->
+<section class="chapter" id="c6" aria-labelledby="h6">
+  <div class="chapter-head"><span>6</span><span class="tool">Leiden, Infomap, null models, Laplacian spectrum, functional roles</span></div>
+  <h2 id="h6">Does London split into regions of its own?</h2>
+  <div class="step" data-scene="communities">
+    <p>Yes, and two unrelated methods agree on them. <em>Leiden</em> maximises modularity, meaning more trips inside groups than a network with the same station strengths would give. At resolution γ = 1 it finds <span data-v="communities.groups.length" data-f="int"></span> regions (Q = <span class="num" data-v="communities.modularity" data-f="f3"></span>, stable across 24 random seeds, mean NMI <span data-v="communities.stability" data-f="f2"></span>). Random networks with the same expected strengths reach Q = <span class="num" data-v="communities.nullModularity.mean" data-f="f3"></span>, so the real value sits about <span data-v="communities.nullModularity.z" data-f="int"></span> standard deviations above chance.</p>
+    <p><em>Infomap</em> works from a different principle: it finds the regions where a random cyclist following the directed flows stays trapped, by compressing the description of its path. It also returns <span data-v="communities.infomap.modules" data-f="int"></span> modules, matching Leiden's (NMI <span class="num" data-v="communities.infomap.nmiLeiden" data-f="f2"></span>).</p>
+    <div class="controls">
+      <span>Resolution</span>
+      <div class="seg" role="group" aria-label="Partition" id="res-seg">
+        <button type="button" data-res="0.5" aria-pressed="false">γ 0.5</button>
+        <button type="button" data-res="1.0" aria-pressed="true">γ 1</button>
+        <button type="button" data-res="1.5" aria-pressed="false">γ 1.5</button>
+        <button type="button" data-res="infomap" aria-pressed="false">Infomap</button>
+      </div>
+    </div>
+    <p class="small muted" id="res-readout" aria-live="polite"></p>
+    <figure class="chart" id="fig-sweep">
+      <div class="chart-title">Modularity and number of regions across resolutions</div>
+      <div class="plot"></div>
+      <figcaption>Labels give the number of regions at each γ. At γ = 0.5 the city splits east from west. The eigengap of the normalised Laplacian (chapter 14) points to the same two-way split.</figcaption>
+    </figure>
+    <figure class="chart" id="fig-mixing">
+      <div class="chart-title">Where each region's riders go</div>
+      <div class="plot"></div>
+      <figcaption>Each row is a region of origin and adds up to 100%. Even the most open region keeps half its trips at home.</figcaption>
+    </figure>
+  </div>
+  <div class="step" data-scene="roles">
+    <h3>Who holds the regions together</h3>
+    <p>Guimerà and Amaral's cartography places each station by two numbers: how dominant it is inside its own region (<em>z</em>) and how evenly its trips spread across regions (participation <em>P</em>). Most stations are <em>peripheral</em>. A few are <em>connector hubs</em>: busy, and spread across regions. These are King's Cross, Waterloo, Soho, Old Street, London Bridge and Liverpool Street, the interchanges that stitch the city together. Only <span data-v="communities.roles.5" data-f="int"></span> are <em>provincial hubs</em> that dominate their own region without bridging.</p>
+    <figure class="chart" id="fig-roles">
+      <div class="chart-title">Functional roles, one dot per station</div>
+      <div class="plot"></div>
+      <figcaption>Shaded bands are the role boundaries from Guimerà and Amaral (2005), computed with trip strengths instead of degrees. Click a dot to open that station.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- 7 -->
+<section class="chapter" id="c7" aria-labelledby="h7">
+  <div class="chapter-head"><span>7</span><span class="tool">Rich club, assortativity, clustering, triad motifs</span></div>
+  <h2 id="h7">What patterns repeat beyond single links?</h2>
+  <div class="step" data-scene="club">
+    <p>The busiest stations form a <em>rich club</em>. Opsahl's weighted coefficient compares the trips the top stations exchange among themselves with the same links carrying randomly reshuffled weights. The ten busiest stations exchange <span class="num" data-v="derived.club10" data-f="f1"></span>× more than chance. The effect fades as the club grows.</p>
+    <figure class="chart" id="fig-club">
+      <div class="chart-title">Weighted rich-club ratio by club size</div>
+      <div class="plot"></div>
+      <figcaption>Observed weight inside the club divided by the mean of 30 random reshuffles of the link weights. Above 1, the top stations trade with each other more heavily than chance.</figcaption>
+    </figure>
+    <p>Mixing, on the other hand, is neutral. Strength assortativity is <span class="num" data-v="mixing.assortativity.strengthUndirected" data-f="f2"></span> and degree assortativity <span class="num" data-v="mixing.assortativity.degreeUndirected" data-f="f2"></span>. Busy and quiet stations trade with each other in proportion to their size.</p>
+  </div>
+  <div class="step" data-scene="motifs">
+    <h3>Triangles that go both ways</h3>
+    <p>On the backbone (<em>α</em> = 0.01), every three-station pattern was counted and compared with 40 copies rewired at random with the same in- and out-degrees (Milo et al., 2002). Fully reciprocal triangles are the most over-represented pattern by far: <span data-v="derived.t300.count" data-f="int"></span> observed against <span data-v="derived.t300.nullMean" data-f="f1"></span> expected. Open one-way chains and cycles are rare.</p>
+    <figure class="chart" id="fig-motifs">
+      <div class="chart-title">Triad significance profile</div>
+      <div class="plot"></div>
+      <figcaption>Normalised z-scores of the 13 connected directed triads (standard MAN codes). Positive: more common than in rewired networks.</figcaption>
+    </figure>
+    <p class="finding">The backbone is made of small neighbourhoods where people ride back the way they came, not of one-way loops.</p>
+  </div>
+</section>
+
+<!-- 8 -->
+<section class="chapter" id="c8" aria-labelledby="h8">
+  <div class="chapter-head"><span>8</span><span class="tool">Temporal networks: hourly layers, regimes, time-resolved centrality</span></div>
+  <h2 id="h8">When does the network change shape?</h2>
+  <div class="step" data-scene="time">
+    <p>Twice every working day, with a single slow wave at weekends. The <span data-v="temporal.days.work" data-f="int"></span> working days and <span data-v="temporal.days.free" data-f="int"></span> weekend and bank-holiday days are averaged separately, so every number is per day. Use the clock on the map to scrub through the day. The label follows the station with the highest PageRank in that hour.</p>
+    <figure class="chart" id="fig-hourly">
+      <div class="chart-title">Journeys started per hour, average day</div>
+      <div class="plot"></div>
+    </figure>
+    <p>The centre of the network moves. It sits at St James's Square and Bank in the morning, Exhibition Road (the museums and Hyde Park) from late morning, Waterloo in the evening peak, and Battersea and the East End at night.</p>
+    <p>Each hour of each day type is a network layer, 48 in all. Comparing every pair of layers by cosine similarity of their link weights reveals five regimes: night, dawn, morning commute, daytime and late evening. The evening peak looks like daytime, not like the morning, because it is the morning in reverse.</p>
+    <figure class="chart" id="fig-sim">
+      <div class="chart-title">Similarity between the 48 hourly networks</div>
+      <div class="plot"></div>
+      <figcaption>Rows and columns: hours 0–23 of working days, then of weekends and bank holidays. A stronger blue means the same links are busy in both hours.</figcaption>
+    </figure>
+  </div>
+  <div class="step" data-scene="mirror">
+    <h3>The evening undoes the morning</h3>
+    <p>Stations that fill up between 7 and 10 am empty out between 4 and 7 pm, and vice versa. Across all stations, the morning and evening net balances correlate at r = <span class="num" data-v="temporal.commute.stationR" data-f="f2"></span>. The links themselves reverse too. Take the 300 busiest morning links. The typical one carries <span data-v="temporal.commute.topMedianAm" data-f="int"></span> trips in May's morning peaks and gets <span data-v="temporal.commute.topMedianBack" data-f="int"></span> back in the evening, but only <span data-v="temporal.commute.topMedianSame" data-f="int"></span> in the same direction.</p>
+    <figure class="chart" id="fig-mirror">
+      <div class="chart-title">The 300 busiest morning links and their evening traffic</div>
+      <div class="plot"></div>
+      <figcaption>Each link appears twice: its evening trips back (<em>j → i</em>) and its evening trips in the same direction (<em>i → j</em>). Totals over May's working days, log axes. Dashed: as many in the evening as in the morning.</figcaption>
+    </figure>
+    <p>As whole layers, the morning network overlaps <span data-v="temporal.commute.overlapReverse" data-f="pct0"></span> with the evening network reversed, against <span data-v="temporal.commute.overlapSame" data-f="pct0"></span> with the evening as it is. The map shows the busiest morning links in amber and the same pairs' evening return in blue.</p>
+  </div>
+</section>
+
+<!-- 9 -->
+<section class="chapter" id="c9" aria-labelledby="h9">
+  <div class="chapter-head"><span>9</span><span class="tool">Clustering stations by temporal signature</span></div>
+  <h2 id="h9">What kinds of stations are there?</h2>
+  <div class="step" data-scene="archetypes">
+    <p>Describe each station by its 24-hour rhythm of departures and arrivals on working days and weekends (96 numbers, each normalised by the station's own size), then group the rhythms with k-means. Six archetypes emerge. The silhouette score is low (<span data-v="derived.sil6" data-f="f2"></span>), so read them as landmarks along a continuum rather than sharp classes. Hover a panel, or click a name in the map's legend, to find those stations.</p>
+    <div id="arche-grid"></div>
+    <p class="finding">Railway termini behave like homes. Waterloo and Paddington empty every morning as commuters ride from the train to the office.</p>
+  </div>
+</section>
+
+<!-- 10 -->
+<section class="chapter" id="c10" aria-labelledby="h10">
+  <div class="chapter-head"><span>10</span><span class="tool">Markov chains, spectral gap, validation against an independent dataset</span></div>
+  <h2 id="h10">Where would the bikes pile up?</h2>
+  <div class="step" data-scene="drift">
+    <p>Treat a bike as a random walker. Its next dock depends only on where it stands, with probabilities given by the trips out of that dock. The second eigenvalue of this Markov chain is <span class="num" data-v="dynamics.markov.lambda2" data-f="f2"></span>, so a bike forgets where it started after about <span data-v="dynamics.markov.mixingRides" data-f="f1"></span> rides. A bike in use makes about <span data-v="dynamics.relocation.ridesPerBikeDay" data-f="f1"></span> rides a day, so it is anywhere within a day or two.</p>
+    <figure class="chart" id="fig-mixing-time">
+      <div class="chart-title">Distance from the long-run distribution, ride after ride</div>
+      <div class="plot"></div>
+      <figcaption>Total variation distance for a bike starting at the busiest dock.</figcaption>
+    </figure>
+    <p>Left alone, the walk drains some docks and floods others. The map colours each station by its net daily balance. Blue stations gain bikes, led by Bank, St James's Square and Liverpool Street. Amber stations lose them, led by Waterloo, Marylebone and the edges of Hyde Park.</p>
+  </div>
+  <div class="step" data-scene="stress">
+    <h3>A prediction tested on other data</h3>
+    <p>If the network model is right, it should predict when docks fill and empty. The test used a separate source: BikePoint snapshots of dock occupancy, taken every few minutes through September 2026, for <span data-v="dynamics.validation.stationsTested" data-f="int"></span> stations. That is a different month and a different dataset. For each station and hour, riders' net arrivals in May (working days) were compared with the change in the average number of bikes docked in September (weekdays).</p>
+    <figure class="chart" id="fig-validation">
+      <div class="chart-title">Predicted net arrivals against the observed change in bikes docked</div>
+      <div class="plot"></div>
+      <figcaption>Each point is the mean of every station-hour in a 0.5-trip band. The shaded band covers the middle half. Dashed: perfect agreement.</figcaption>
+    </figure>
+    <p class="finding">May's journeys predict September's docks: r = <span data-v="dynamics.validation.pooledR" data-f="f2"></span> over <span data-v="dynamics.validation.pairs" data-f="int"></span> station-hours, and a median r = <span data-v="dynamics.validation.medianStationR" data-f="f2"></span> within each station.</p>
+    <p>The slope is <span class="num" data-v="dynamics.validation.slope" data-f="f2"></span>, not 1. Full docks turn riders away, empty ones can't lend, and staff move bikes, so about half the predicted swing is absorbed. The map now shows each station's daily swing as a share of its docks. Stations with the largest swing are the ones most often found completely empty or completely full in September (Spearman <span data-v="dynamics.validation.stressVsProblems" data-f="f2"></span>).</p>
+  </div>
+</section>
+
+<!-- 11 -->
+<section class="chapter" id="c11" aria-labelledby="h11">
+  <div class="chapter-head"><span>11</span><span class="tool">Trajectory reconstruction, hidden-layer inference</span></div>
+  <h2 id="h11">Who moves the bikes back?</h2>
+  <div class="step" data-scene="vans">
+    <p>Every hire record carries a bike number, so every bike's month can be followed. <span data-v="dynamics.relocation.handoffs" data-f="int"></span> times a bike was hired again after a journey. In <span data-v="dynamics.relocation.relocations" data-f="int"></span> of those (<span data-v="dynamics.relocation.share" data-f="pct1"></span>), the next hire started at a different dock from where the bike had been left. No customer rode it there. These are the operator's van and staff moves, plus the odd repair or data gap. Together they form a second, hidden network, drawn on the map in pink.</p>
+    <figure class="chart" id="fig-vans">
+      <div class="chart-title">Riders' net arrivals against the operator's net deliveries, per station, all month</div>
+      <div class="plot"></div>
+      <figcaption>One dot per station. A station that riders fill (right) is one the operator empties (bottom), and the reverse.</figcaption>
+    </figure>
+    <p class="finding">The operator's network is the mirror image of the riders': Spearman ρ = <span data-v="dynamics.relocation.riderVsOperator" data-f="f2"></span>. Together they cancel <span data-v="dynamics.relocation.balanceRecovered" data-f="pct0"></span> of the imbalance riders create.</p>
+    <p>The median relocation jumps <span data-v="dynamics.relocation.medianKm" data-f="km"></span> and reappears <span data-v="dynamics.relocation.medianGapHours" data-f="f0"></span> hours later, most often at the start of the morning peak. The single busiest move is a few metres long, between the two Queen Street docks at Bank and among Waterloo's three docks: staff spreading bikes along a row of docks at rush hour.</p>
+    <figure class="chart" id="fig-van-hours">
+      <div class="chart-title">Relocated bikes reappearing, by hour of the day</div>
+      <div class="plot"></div>
+    </figure>
+  </div>
+</section>
+
+<!-- 12 -->
+<section class="chapter" id="c12" aria-labelledby="h12">
+  <div class="chapter-head"><span>12</span><span class="tool">Targeted attacks, percolation, Granovetter's weak ties</span></div>
+  <h2 id="h12">What would break it?</h2>
+  <div class="step" data-scene="attack">
+    <p>Close stations one by one and count what survives: journeys whose two docks are still open, and the largest connected piece of the strict backbone (<em>α</em> = 0.001). Nobody reroutes in this model, so it measures how concentrated today's demand is. It is not a forecast of behaviour.</p>
+    <div class="controls">
+      <label for="attack-kind">Close stations by</label>
+      <select id="attack-kind">
+        <option value="strength">Most journeys first</option>
+        <option value="betweenness">Highest betweenness first</option>
+        <option value="participation">Most cross-region first</option>
+        <option value="centre">From the centre outwards</option>
+        <option value="random">At random</option>
+      </select>
+      <label class="range">Closed <input type="range" id="attack-f" min="0" max="20" step="1" value="4"><output id="attack-out">10%</output></label>
+    </div>
+    <p id="attack-readout" class="small" aria-live="polite"></p>
+    <figure class="chart" id="fig-attack">
+      <div class="chart-title">Largest connected share of the backbone as stations close</div>
+      <div class="plot"></div>
+      <figcaption>Closing the busiest stations shatters the backbone after about a quarter of them, a percolation transition. Random closures shrink it roughly in proportion. The table gives the share of journeys still possible under each strategy.</figcaption>
+    </figure>
+  </div>
+  <div class="step" data-scene="weakties">
+    <h3>Strong links sit inside, weak links bridge</h3>
+    <p>Granovetter argued that weak social ties bridge communities. Onnela et al. (2007) tested this on phone calls. The same test works here. The overlap of two stations' neighbourhoods rises with the weight of the link between them, from <span data-v="derived.overlapLow" data-f="f2"></span> to <span data-v="derived.overlapHigh" data-f="f2"></span>. Removing links from the weakest up breaks the backbone sooner than removing them from the strongest down.</p>
+    <figure class="chart" id="fig-percolation">
+      <div class="chart-title">Largest connected share as backbone links are removed</div>
+      <div class="plot"></div>
+    </figure>
+  </div>
+</section>
+
+<!-- 13 -->
+<section class="chapter" id="c13" aria-labelledby="h13">
+  <div class="chapter-head"><span>13</span><span class="tool">Multiplex networks: layer overlap and comparison</span></div>
+  <h2 id="h13">Same stations, different networks</h2>
+  <div class="step" data-scene="layers">
+    <p>Split the journeys into layers and the network changes character. Electric-bike trips are longer, fade more slowly with distance and are less often ridden back. At weekends the city splits into five regions instead of four.</p>
+    <div class="toolkit-wrap"><table class="ledger" id="layer-table"></table></div>
+    <figure class="chart" id="fig-ebike">
+      <div class="chart-title">Share of hires on e-bikes, by straight-line distance</div>
+      <div class="plot"></div>
+    </figure>
+    <p>The two bike layers share only <span data-v="layerPairs.classic-electric.backboneJaccard" data-f="pct0"></span> of their significant links (Jaccard), and their weighted edge overlap is <span data-v="layerPairs.classic-electric.overlap" data-f="pct0"></span>. Yet station activity correlates at <span data-v="layerPairs.classic-electric.strengthCorr" data-f="f2"></span>. People hire both kinds of bike at the same stations, but take e-bikes to different places. The map shows each station's e-bike share of departures.</p>
+  </div>
+</section>
+
+<!-- 14 -->
+<section class="chapter" id="c14" aria-labelledby="h14">
+  <div class="chapter-head"><span>14</span><span class="tool">Embeddings: t-SNE, force-directed layout, spectral coordinates</span></div>
+  <h2 id="h14">London, as the bikes see it</h2>
+  <div class="step" data-scene="morph">
+    <p>Throw away the street map and place each station by <em>where its riders go and come from</em>. The flow map runs t-SNE on each station's Hellinger-transformed origin and destination profile. The force layout draws the significant links as springs. The spectral layout uses the first non-trivial eigenvectors of the normalised Laplacian. Each is rotated and scaled onto geography (Procrustes), so stations glide from one view to the next.</p>
+    <div class="controls">
+      <div class="seg" role="group" aria-label="Layout" id="layout-seg">
+        <button type="button" data-layout="geo" aria-pressed="false">Geography</button>
+        <button type="button" data-layout="flow" aria-pressed="true">Flow map</button>
+        <button type="button" data-layout="force" aria-pressed="false">Force layout</button>
+        <button type="button" data-layout="spectral" aria-pressed="false">Spectral</button>
+      </div>
+    </div>
+    <p>The flow map keeps each station's flow neighbours (trustworthiness <span data-v="embedding.quality.flow.trust" data-f="f3"></span>) and is still recognisably London: flow distances and geographic distances correlate at <span data-v="embedding.quality.flow.geoSpearman" data-f="f2"></span>. Cycling is local. The stations that move furthest are the edges of the network (the Isle of Dogs, Canada Water, Putney, Stratford), which are pulled into the orbit of the hubs their riders actually use.</p>
+    <figure class="chart" id="fig-spectrum">
+      <div class="chart-title">The first eigenvalues of the normalised Laplacian</div>
+      <div class="plot"></div>
+      <figcaption>The largest gap comes after the second eigenvalue: two macro-regions, east and west, as Leiden finds at γ = 0.5.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- explorer -->
+<section class="chapter" id="explorer" aria-labelledby="hx">
+  <div class="chapter-head"><span>Explorer</span><span class="tool">Every measure for every station</span></div>
+  <h2 id="hx">Look up a station</h2>
+  <div class="step" data-scene="explorer">
+    <p>Search for a dock, or click any station on the map at any point in the essay. The card brings together every measure above for that one station, with its strongest links drawn on the map: amber for where riders go, blue for where they come from.</p>
+    <div class="search" role="combobox" aria-expanded="false" aria-owns="search-list" aria-haspopup="listbox">
+      <label class="sr-only" for="search-input">Station name or area</label>
+      <input id="search-input" type="search" placeholder="Station name or area, e.g. Waterloo" autocomplete="off" aria-autocomplete="list" aria-controls="search-list">
+      <ul id="search-list" role="listbox" hidden></ul>
+    </div>
+    <div class="suggest" id="suggest"></div>
+    <div class="card" id="card" aria-live="polite"></div>
+  </div>
+</section>
+
 </main>
-<noscript>Activa JavaScript para usar el mapa.</noscript>
-</body></html>
+
+<aside class="stage" id="stage" aria-label="Network map">
+  <canvas role="img" aria-label="Network map"></canvas>
+  <div class="map-tip" aria-hidden="true"></div>
+  <div class="hud">
+    <div class="caption"></div>
+    <div class="tools">
+      <button type="button" data-zoom="in" aria-label="Zoom in">+</button>
+      <button type="button" data-zoom="out" aria-label="Zoom out">−</button>
+      <button type="button" data-zoom="reset" aria-label="Reset view"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6V2h4M14 6V2h-4M2 10v4h4M14 10v4h-4" stroke="currentColor" stroke-width="1.6" fill="none"/></svg></button>
+    </div>
+    <div class="clock">
+      <button type="button" data-act="play" aria-label="Pause the day"></button>
+      <span class="time">08:00</span>
+      <input type="range" min="0" max="47.99" step="0.05" value="16" aria-label="Time of day">
+      <div class="seg" role="group" aria-label="Day type">
+        <button type="button" data-kind="work" aria-pressed="true">Weekday</button>
+        <button type="button" data-kind="free" aria-pressed="false">Weekend</button>
+      </div>
+      <span class="daykind"></span>
+    </div>
+    <div class="legend-box"></div>
+    <div class="hint">Drag to move. ⌘ or Ctrl + scroll to zoom. Click a station.</div>
+  </div>
+  <div class="loading">Loading 857,151 journeys…</div>
+</aside>
+</div>
+
+<div class="back">
+  <div class="back-inner">
+    <h2>The toolkit</h2>
+    <p>Every method in the essay, what it was used to answer, and how it was run. The pipeline is Python (pandas, DuckDB, NumPy, SciPy, igraph, leidenalg, Infomap, scikit-learn). The page is plain JavaScript, Canvas and d3, with no framework and no server.</p>
+    <div class="toolkit-wrap"><table class="toolkit" id="toolkit"></table></div>
+
+    <h2>Data, method and limits</h2>
+    <div class="notes">
+      <section>
+        <h3>Sources</h3>
+        <p>Journeys: Transport for London's open cycle-hire extracts 443 and 444, covering 1–31 May 2026 (<span data-v="meta.report.validJourneys" data-f="int"></span> valid hires). Station positions and dock counts: TfL BikePoint API, snapshot of 20 October 2026. Dock occupancy: BikePoint observations archived by Francisco Feregrino on Hugging Face (<a href="https://huggingface.co/datasets/feregrino/london-cycles">feregrino/london-cycles</a>), pinned revision, CC BY-SA 3.0. River and parks: © OpenStreetMap contributors (ODbL).</p>
+        <p class="small muted">Powered by TfL Open Data. Contains OS data © Crown copyright and database rights 2016 and Geomni UK Map data © and database rights 2019.</p>
+      </section>
+      <section>
+        <h3>Cleaning</h3>
+        <p>Hires were deduplicated by rental id and limited to positive durations within May. Stations were matched to current BikePoint docks by normalised name. <span data-v="meta.report.matchedJourneys" data-f="int"></span> hires (<span data-v="meta.report.matchedShare" data-f="pct1"></span>) matched. The rest touch six retired or renamed docks and are excluded. Bank holidays (4 and 25 May) count as weekend days.</p>
+      </section>
+      <section>
+        <h3>What this cannot say</h3>
+        <p>Lines join docks. They are not routes ridden. A hire is not a person: one commuter can account for many links. One month cannot separate season from habit. Relocations are inferred from bike ids and include repairs and data gaps. Closure curves assume nobody reroutes. Occupancy comes from a different month than the journeys, which makes the validation conservative, not exact.</p>
+      </section>
+      <section>
+        <h3>Reproduce it</h3>
+<pre>python -m venv .venv &amp;&amp; source .venv/bin/activate
+pip install -r requirements.txt
+python -m cycles fetch &amp;&amp; python -m cycles prepare
+python -m cycles.trips
+python -m cycles.build --fresh
+python -m http.server 4173 --directory site</pre>
+        <p class="small">Fixed seeds (42) throughout. The full run takes about six minutes on a laptop, most of it the 24-seed Leiden ensembles and the null models.</p>
+      </section>
+    </div>
+    <footer class="colophon">
+      <span>Code MIT. Occupancy-derived numbers CC BY-SA 3.0.</span>
+      <a href="https://github.com/aleetreny/santander-cycles-network">Source on GitHub</a>
+      <span id="generated"></span>
+    </footer>
+  </div>
+</div>
+</body>
+</html>
